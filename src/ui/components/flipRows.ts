@@ -1,18 +1,7 @@
-import type { FlipSortKey, Sort } from '../../domain/listFilters';
 import type { Flip } from '../../domain/profit';
 import type { MatchConfidence } from '../../domain/types';
-import { entryKey, type ViewMode } from '../places';
-import type { Entry, Selection } from '../useSelection';
-
-/** What both flip layouts (ledger and sheet) share. */
-export interface FlipListProps {
-  flips: Flip[];
-  mode: ViewMode;
-  sort: Sort<FlipSortKey>;
-  onSort: (sort: Sort<FlipSortKey>) => void;
-  selection: Selection;
-  onChange: () => void;
-}
+import { entryKey } from '../places';
+import type { Entry } from '../useSelection';
 
 export const CONFIDENCE: Record<MatchConfidence, { label: string; hint: string }> = {
   exact: { label: 'Exact', hint: 'Same float, seed and pattern' },

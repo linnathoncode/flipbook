@@ -9,9 +9,9 @@ Reworks the original `cs-trade-journal-project.md` after checking it against rea
 |---|---|---|
 | Match by `asset_id` / inspect link ("Exact" tier) | No sell shares an `asset_id` with any buy — Steam reissues asset IDs on every trade, and inspect links embed the asset ID | Drop that tier. The identity of a skin is its **fingerprint**: `def_index + paint_index + paint_seed + float_value`. Most sold skins matched a buy this way; the rest were bought before the export window or off-CSFloat |
 | Capture sells by scraping CSFloat sell pages | `/me/trades` already returns both sides with price, item, state | **Sync** from CSFloat's own API using the user's logged-in session (request runs inside a csfloat.com tab, so the browser attaches the session cookie — no API key is ever read or stored). DOM scraping dropped |
-| One `trades.json` import is the source | Export reports a `count` higher than the trades it contains → older buys missing (this is why the earlier CSV needed `fallback_oldest_json_date`) | Sync paginates until `count` is reached. `trades.json` import kept as offline fallback |
+| One `trades.json` import is the source | Export reports a `count` higher than the trades it contains → older buys missing (this is why the earlier CSV needed `fallback_oldest_json_date`) | Sync paginates until `count` is reached. No file import |
 | Items without float are edge cases | Many buys are stickers; cases/pins/patches/music kits also lack float | Non-float items are **commodities**: matched FIFO by `market_hash_name` |
-| Tracker columns: Skin Name, Buy Price, … | Flips sheet now: `Buy Date, Skin Name, Buy Price, Sell Price, Total Fees, Net Profit, Profit Percentage` at C1, summary `Total Profit, Avg %, Weighted Avg %` at J1:L2 | Import and export follow the actual layout (header auto-detected) |
+| Tracker columns: Skin Name, Buy Price, … | Flips sheet now: `Buy Date, Skin Name, Buy Price, Sell Price, Total Fees, Net Profit, Profit Percentage` at C1, summary `Total Profit, Avg %, Weighted Avg %` at J1:L2 | Export follows the actual layout |
 | Exact matching on IDs | Prices are integer **cents**; `state` ∈ verified/pending/cancelled/failed | Store cents internally. Count `verified` as closed, show `pending` separately, skip `cancelled`/`failed` |
 
 ## Scope (MVP)
@@ -29,7 +29,6 @@ manifest.json (MV3)
 └── dashboard.html       React app
     ├── sync             chrome.scripting.executeScript into a csfloat.com tab
     │                    → fetch('/api/v1/me/trades?page=N&limit=…', {credentials:'include'})
-    ├── import           trades.json (CSFloat) + cs trades.xlsx (existing tracker)
     ├── domain           pure TS: normalize → positions → matcher → P&L
     ├── db               IndexedDB (idb): trades, manualTrades, matchOverrides, settings
     └── export           ExcelJS → Flips / _meta (hidden)
@@ -49,7 +48,7 @@ Side is derived from `buyer_id`/`seller_id` vs the user's Steam ID (auto-detecte
 
 ## Matching
 
-Run on every import/sync; deterministic and idempotent.
+Run on every sync; deterministic and idempotent.
 
 1. Apply locked (manual) matches first.
 2. **Fingerprint** (float items): exact `defIndex+paintIndex+paintSeed+float` → confidence `exact`.
@@ -71,26 +70,28 @@ Same formulas as the Flips sheet so exported numbers reconcile with Excel.
 
 ## Excel
 
-- **Import**: find the header row containing `Skin Name` + `Buy Price` anywhere in the first 10 rows/26 cols.
-  Each row → an `xlsx` buy (and a sell if Sell Price is set). Rows are linked to CSFloat trades by
-  normalized name (`Famas`→`FAMAS`, `FT`→`(Field-Tested)`, `- T Agent` suffix stripped, whitespace collapsed)
-  + price + date proximity, replacing the one-off CSV script.
+- **Import** was dropped: there's no telling how other people keep their spreadsheets.
+  Rows imported by earlier versions stay in the book (source `xlsx`, match `tracker`).
 - **Export**: `Flips` sheet with live formulas at the same columns (C:L), hidden `_meta` sheet with trade IDs, float, seed, match confidence.
 
 ## Dashboard screens
 
-Full-width layout: a sidebar (book, folders, filters) and the list. The header shows sync status and **Sync now**.
+Sheet-first, like the tracker it replaces. The header shows sync status, **Sync now** and the light/dark toggle;
+spreadsheet tabs along the bottom switch sheets, with **Export .xlsx** and **Settings** at the end.
 
-1. **Flips** — closed positions; the headline sentence summarizes settled flips matching the current filters.
-2. **Holding** — bought, not sold, with cost total.
+1. **Flips** (opens first) — closed positions in the tracker's columns, newest buys on top, totals row, big summary figures above.
+   Trades since the last visit carry a **New** tag.
+2. **Holding** — bought, not sold, with cost total and days held.
 3. **Needs review** — ambiguous sales (pick the buy) and sales with no buy on record.
-4. **Folders** — user-made places for trades that aren't flips (cases, long holds). Moving a flip moves both trades;
+4. **Folders** — one tab each, for trades that aren't flips (cases, long holds). Moving a flip moves both trades;
    a flip follows its sell's folder, else its buy's. Folders are excluded from the main totals and the export.
-5. **Import, export & fees** — `trades.json` / `.xlsx` import, `.xlsx` export, seller fee.
+5. **Settings** — sync explanation and seller fee.
 
-Every list: search, filters (type, period, result, match), sortable columns, three layouts
-(Ledger, Compact, Sheet with gridlines and a totals row), and row selection with shift-click ranges feeding a bulk **Move to** bar.
-Layout and sort are remembered per browser.
+Every sheet: search, a **Filters** drawer (type, period, result, match) that stays closed until asked for, sortable columns,
+and spreadsheet selection (click, Ctrl-click, Shift-click, Escape) that swaps the toolbar for **Move to**.
+Sort and theme are remembered per browser.
+
+Look: Swiss Ledger — black, white and one red (#E2231A light / #FF3B2F dark), Archivo + JetBrains Mono, thick rules, no radii.
 
 ## Sync
 
@@ -104,7 +105,7 @@ One sync runs at a time. Failures are stored and shown in the header.
 2. Domain: normalize `trades.json`, matcher, P&L — tests on the real export.
 3. IndexedDB store + import screen.
 4. Sync from CSFloat session (paginated).
-5. Excel import (name normalizer) + export.
+5. Excel export (import was built, then dropped).
 6. Review UI for manual matches.
 7. Polish: manual trade entry (sales on other markets with their own fee).
 
@@ -113,7 +114,7 @@ One sync runs at a time. Failures are stored and shown in the header.
 - Parser: real `trades.json` → verified and pending kept, cancelled/failed dropped; cents preserved; missing float ok.
 - Matcher: fingerprint match; re-bought item takes latest prior buy; commodity FIFO; buy-after-sell never matches; locked match survives rerun; idempotent.
 - P&L: matches Flips sheet row 2 (7.65 → 8.15 ⇒ fee 0.163, net 0.337, 4.4%).
-- Excel: header at C1 detected; name normalizer cases from the existing CSV; export formulas present.
+- Excel: name normalizer cases from the existing CSV; export formulas present.
 
 ## Open questions
 

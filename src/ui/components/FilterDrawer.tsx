@@ -1,6 +1,6 @@
+import type { ReactNode } from 'react';
 import {
   EMPTY_FILTER,
-  isUnfiltered,
   ITEM_KINDS,
   PERIODS,
   type ItemKind,
@@ -18,15 +18,20 @@ const KIND_LABEL: Record<ItemKind, string> = {
   other: 'Other',
 };
 
-const PERIOD_LABEL: Record<Period, string> = { '7d': '7d', '30d': '30d', '90d': '90d', '1y': '1y', all: 'All' };
+const PERIOD_LABEL: Record<Period, string> = { '7d': '7 days', '30d': '30 days', '90d': '90 days', '1y': 'Year', all: 'All time' };
 const RESULT_LABEL: Record<ResultFilter, string> = { all: 'All', profit: 'Profit', loss: 'Loss' };
-const MATCH_OPTIONS: { value: MatchConfidence; label: string }[] = [
+const MATCH_OPTIONS: Option<MatchConfidence>[] = [
   { value: 'exact', label: 'Exact' },
   { value: 'fifo', label: 'FIFO' },
   { value: 'suggested', label: 'Check' },
   { value: 'tracker', label: 'Tracker' },
   { value: 'manual', label: 'Manual' },
 ];
+
+/** How many filters are narrowing the list, search aside; shown on the Filters button. */
+export function countActiveFilters(filter: ListFilter): number {
+  return [filter.kinds.length > 0, filter.period !== 'all', filter.result !== 'all', filter.matches.length > 0].filter(Boolean).length;
+}
 
 interface Props {
   filter: ListFilter;
@@ -36,21 +41,11 @@ interface Props {
   periodLabel: string;
 }
 
-export function FilterPanel({ filter, onChange, showFlipFilters, periodLabel }: Props) {
-  const isFiltered = !isUnfiltered({ ...filter, query: '' });
+export function FilterDrawer({ filter, onChange, showFlipFilters, periodLabel }: Props) {
   const update = (patch: Partial<ListFilter>) => onChange({ ...filter, ...patch });
 
   return (
-    <section className="filters" aria-label="Filters">
-      <div className="sidebar-title-row">
-        <h2 className="sidebar-title">Filter</h2>
-        {isFiltered && (
-          <button className="text-button" onClick={() => onChange({ ...EMPTY_FILTER, query: filter.query })}>
-            Clear
-          </button>
-        )}
-      </div>
-
+    <section id="filter-drawer" className="filter-drawer" aria-label="Filters">
       <FilterGroup label="Type">
         <Chips options={ITEM_KINDS.map((kind) => ({ value: kind, label: KIND_LABEL[kind] }))} selected={filter.kinds} onChange={(kinds) => update({ kinds })} />
       </FilterGroup>
@@ -73,11 +68,17 @@ export function FilterPanel({ filter, onChange, showFlipFilters, periodLabel }: 
           </FilterGroup>
         </>
       )}
+
+      {countActiveFilters(filter) > 0 && (
+        <button className="text-button filter-clear" onClick={() => onChange({ ...EMPTY_FILTER, query: filter.query })}>
+          Clear filters
+        </button>
+      )}
     </section>
   );
 }
 
-function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="filter-group" role="group" aria-label={label}>
       <span className="filter-label">{label}</span>
@@ -106,11 +107,11 @@ function Chips<T extends string>({ options, selected, onChange }: { options: Opt
   );
 }
 
-export function Segmented<T extends string>({ options, value, onChange }: { options: Option<T>[]; value: T; onChange: (next: T) => void }) {
+function Segmented<T extends string>({ options, value, onChange }: { options: Option<T>[]; value: T; onChange: (next: T) => void }) {
   return (
-    <div className="segmented">
+    <div className="chips">
       {options.map((option) => (
-        <button key={option.value} aria-pressed={option.value === value} onClick={() => onChange(option.value)}>
+        <button key={option.value} className="chip" aria-pressed={option.value === value} onClick={() => onChange(option.value)}>
           {option.label}
         </button>
       ))}

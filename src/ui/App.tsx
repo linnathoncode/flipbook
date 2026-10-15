@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import type { Journal } from '../app/actions';
 import type { Folder, Section } from '../domain/folders';
 import {
   EMPTY_FILTER,
@@ -13,52 +14,59 @@ import {
   type Sort,
 } from '../domain/listFilters';
 import { centsToDollars, summarizeSettled } from '../domain/profit';
-import type { Journal } from '../app/actions';
-import { DataPanel } from './components/DataPanel';
-import { FilterPanel } from './components/FilterPanel';
-import { FlipList } from './components/FlipList';
+import { countActiveFilters, FilterDrawer } from './components/FilterDrawer';
+import { FlipSheet } from './components/FlipSheet';
 import { FolderHeader } from './components/FolderHeader';
-import { FlipHeadline, HoldingHeadline, PlainHeadline } from './components/Headline';
-import { HoldingList } from './components/HoldingList';
+import { HoldingSheet } from './components/HoldingSheet';
 import { Masthead } from './components/Masthead';
 import { ReviewPanel } from './components/ReviewPanel';
-import { SelectionBar } from './components/SelectionBar';
+import { SettingsPanel } from './components/SettingsPanel';
 import { EmptyState } from './components/shared';
-import { Sidebar, type PlaceCounts } from './components/Sidebar';
-import { Toolbar } from './components/Toolbar';
-import type { Place, ViewMode } from './places';
+import { SheetTabs, type PlaceCounts } from './components/SheetTabs';
+import { FlipSummary, HoldingSummary } from './components/Summary';
+import { SelectionActions, Toolbar } from './components/Toolbar';
+import type { Place } from './places';
 import { useJournal } from './useJournal';
+import { useLastVisit } from './useLastVisit';
 import { usePreference } from './usePreference';
 import { useSelection, type Selection } from './useSelection';
+import { useTheme } from './useTheme';
 
-const DEFAULT_FLIP_SORT: Sort<FlipSortKey> = { key: 'sold', descending: true };
+// Newest buys on top, the way the tracker sheet reads. Spreadsheet rows have no sale date to sort by.
+const DEFAULT_FLIP_SORT: Sort<FlipSortKey> = { key: 'bought', descending: true };
 const DEFAULT_HOLDING_SORT: Sort<HoldingSortKey> = { key: 'bought', descending: true };
-const PERIOD_LABEL: Partial<Record<Place['kind'], string>> = { flips: 'Sold', holding: 'Bought' };
 
-/** How the user wants lists shown; shared by every list screen. */
-interface ListSettings {
+/** What every list screen shares: how lists are filtered, sorted and selected. */
+interface ListContext {
   filter: ListFilter;
   setFilter: (filter: ListFilter) => void;
-  mode: ViewMode;
-  setMode: (mode: ViewMode) => void;
+  filtersOpen: boolean;
+  toggleFilters: () => void;
   flipSort: Sort<FlipSortKey>;
   setFlipSort: (sort: Sort<FlipSortKey>) => void;
   holdingSort: Sort<HoldingSortKey>;
   setHoldingSort: (sort: Sort<HoldingSortKey>) => void;
   selection: Selection;
+  folders: Folder[];
+  /** Trades after this get a NEW tag. */
+  newSince?: string;
+  onChange: () => void;
 }
 
 export function App() {
   const { journal, error, refresh, sync, syncState } = useJournal();
+  const [theme, toggleTheme] = useTheme();
+  const lastVisit = useLastVisit();
   const [place, setPlace] = useState<Place>({ kind: 'flips' });
   const [filter, setFilter] = useState<ListFilter>(EMPTY_FILTER);
-  const [mode, setMode] = usePreference<ViewMode>('view-mode', 'ledger');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [flipSort, setFlipSort] = usePreference('flip-sort', DEFAULT_FLIP_SORT);
   const [holdingSort, setHoldingSort] = usePreference('holding-sort', DEFAULT_HOLDING_SORT);
   const selection = useSelection();
+  useEscapeToClear(selection);
 
-  if (error) return <main className="page"><p className="notice notice-error">{error}</p></main>;
-  if (!journal) return <main className="page" aria-busy="true" />;
+  if (error) return <main className="content"><p className="notice notice-error">{error}</p></main>;
+  if (!journal) return <main className="content" aria-busy="true" />;
 
   const navigate = (next: Place) => {
     selection.clear();
@@ -68,64 +76,60 @@ export function App() {
   // A folder deleted elsewhere (or just now) falls back to the book.
   const folder = place.kind === 'folder' ? journal.folders.find((candidate) => candidate.id === place.folderId) : undefined;
   const current: Place = place.kind === 'folder' && !folder ? { kind: 'flips' } : place;
-  const settings: ListSettings = { filter, setFilter, mode, setMode, flipSort, setFlipSort, holdingSort, setHoldingSort, selection };
-  const showFilters = current.kind === 'flips' || current.kind === 'holding' || current.kind === 'folder';
+  const list: ListContext = {
+    filter,
+    setFilter,
+    filtersOpen,
+    toggleFilters: () => setFiltersOpen(!filtersOpen),
+    flipSort,
+    setFlipSort,
+    holdingSort,
+    setHoldingSort,
+    selection,
+    folders: journal.folders,
+    newSince: lastVisit,
+    onChange: refresh,
+  };
   const { book } = journal.shelved;
 
   return (
-    <div className={`page ${selection.count > 0 ? 'has-selection' : ''}`}>
+    <div className="app">
       <Masthead
         lastSyncAt={journal.settings.lastSyncAt}
         lastSyncError={journal.settings.lastSyncError}
         syncState={syncState}
         onSync={sync}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
-      <div className="layout">
-        <Sidebar place={current} onNavigate={navigate} folders={journal.folders} counts={countPlaces(journal)} onChange={refresh}>
-          {showFilters && (
-            <FilterPanel
-              filter={filter}
-              onChange={setFilter}
-              showFlipFilters={current.kind !== 'holding'}
-              periodLabel={PERIOD_LABEL[current.kind] ?? 'When'}
-            />
-          )}
-        </Sidebar>
-        <main className="content">
-          {current.kind === 'flips' && <FlipsScreen flips={book.flips} settings={settings} onChange={refresh} />}
-          {current.kind === 'holding' && <HoldingScreen buys={book.holdings} settings={settings} />}
-          {current.kind === 'review' && (
-            <>
-              <PlainHeadline text={reviewHeadline(book.unmatched.length)} />
-              <ReviewPanel unmatched={book.unmatched} selection={selection} onChange={refresh} />
-            </>
-          )}
-          {folder && (
-            <FolderScreen
-              key={folder.id}
-              folder={folder}
-              section={journal.shelved.folders.get(folder.id)!}
-              settings={settings}
-              onChange={refresh}
-              onDeleted={() => { navigate({ kind: 'flips' }); void refresh(); }}
-            />
-          )}
-          {current.kind === 'data' && <DataPanel feeRate={journal.settings.feeRate} onSync={sync} onChange={refresh} />}
-        </main>
-      </div>
-      <SelectionBar selection={selection} folders={journal.folders} currentFolderId={folder?.id} onChange={refresh} />
+      <main className="content">
+        {current.kind === 'flips' && <FlipsScreen flips={book.flips} list={list} />}
+        {current.kind === 'holding' && <HoldingScreen buys={book.holdings} list={list} />}
+        {current.kind === 'review' && <ReviewScreen unmatched={book.unmatched} list={list} />}
+        {folder && (
+          <FolderScreen
+            key={folder.id}
+            folder={folder}
+            section={journal.shelved.folders.get(folder.id)!}
+            list={list}
+            onDeleted={() => { navigate({ kind: 'flips' }); void refresh(); }}
+          />
+        )}
+        {current.kind === 'settings' && <SettingsPanel feeRate={journal.settings.feeRate} onSync={sync} onChange={refresh} />}
+      </main>
+      <SheetTabs place={current} onNavigate={navigate} folders={journal.folders} counts={countPlaces(journal)} onChange={refresh} />
     </div>
   );
 }
 
-function FlipsScreen({ flips, settings, onChange }: { flips: Section['flips']; settings: ListSettings; onChange: () => void }) {
-  const shown = sortFlips(filterFlips(flips, settings.filter, new Date()), settings.flipSort);
+function FlipsScreen({ flips, list }: { flips: Section['flips']; list: ListContext }) {
+  const shown = sortFlips(filterFlips(flips, list.filter, new Date()), list.flipSort);
   return (
     <>
-      <FlipHeadline summary={summarizeSettled(shown)} filtered={!isUnfiltered(settings.filter)} />
-      <ListToolbar settings={settings} shown={shown.length} total={flips.length} noun="flip" />
+      <FlipSummary summary={summarizeSettled(shown)} filtered={!isUnfiltered(list.filter)} />
+      <ListControls list={list} shown={shown.length} total={flips.length} noun="flip" periodLabel="Sold in" showFlipFilters />
       {shown.length > 0 ? (
-        <FlipList flips={shown} mode={settings.mode} sort={settings.flipSort} onSort={settings.setFlipSort} selection={settings.selection} onChange={onChange} />
+        <FlipSheet flips={shown} sort={list.flipSort} onSort={list.setFlipSort} selection={list.selection} newSince={list.newSince} onChange={list.onChange} />
       ) : (
         <EmptyState text={flips.length ? 'No flips match these filters.' : 'No flips yet. Open CSFloat and Flipbook syncs your trades on its own.'} />
       )}
@@ -133,15 +137,15 @@ function FlipsScreen({ flips, settings, onChange }: { flips: Section['flips']; s
   );
 }
 
-function HoldingScreen({ buys, settings }: { buys: Section['holdings']; settings: ListSettings }) {
-  const shown = sortHoldings(filterHoldings(buys, settings.filter, new Date()), settings.holdingSort);
+function HoldingScreen({ buys, list }: { buys: Section['holdings']; list: ListContext }) {
+  const shown = sortHoldings(filterHoldings(buys, list.filter, new Date()), list.holdingSort);
   const totalCost = centsToDollars(shown.reduce((sum, buy) => sum + buy.priceCents, 0));
   return (
     <>
-      <HoldingHeadline count={shown.length} totalCost={totalCost} />
-      <ListToolbar settings={settings} shown={shown.length} total={buys.length} noun="item" />
+      <HoldingSummary count={shown.length} totalCost={totalCost} />
+      <ListControls list={list} shown={shown.length} total={buys.length} noun="item" periodLabel="Bought in" showFlipFilters={false} />
       {shown.length > 0 ? (
-        <HoldingList buys={shown} mode={settings.mode} sort={settings.holdingSort} onSort={settings.setHoldingSort} selection={settings.selection} />
+        <HoldingSheet buys={shown} sort={list.holdingSort} onSort={list.setHoldingSort} selection={list.selection} newSince={list.newSince} />
       ) : (
         <EmptyState text={buys.length ? 'Nothing you hold matches these filters.' : 'Nothing in hand. Every buy has been sold.'} />
       )}
@@ -149,35 +153,44 @@ function HoldingScreen({ buys, settings }: { buys: Section['holdings']; settings
   );
 }
 
+function ReviewScreen({ unmatched, list }: { unmatched: Section['unmatched']; list: ListContext }) {
+  return (
+    <>
+      <h1 className="page-title">{reviewTitle(unmatched.length)}</h1>
+      {list.selection.count > 0 && <SelectionActions selection={list.selection} folders={list.folders} onChange={list.onChange} />}
+      <ReviewPanel unmatched={unmatched} selection={list.selection} onChange={list.onChange} />
+    </>
+  );
+}
+
 interface FolderScreenProps {
   folder: Folder;
   section: Section;
-  settings: ListSettings;
-  onChange: () => void;
+  list: ListContext;
   onDeleted: () => void;
 }
 
-function FolderScreen({ folder, section, settings, onChange, onDeleted }: FolderScreenProps) {
+function FolderScreen({ folder, section, list, onDeleted }: FolderScreenProps) {
   const now = new Date();
-  const flips = sortFlips(filterFlips(section.flips, settings.filter, now), settings.flipSort);
-  const holdings = sortHoldings(filterHoldings(section.holdings, settings.filter, now), settings.holdingSort);
+  const flips = sortFlips(filterFlips(section.flips, list.filter, now), list.flipSort);
+  const holdings = sortHoldings(filterHoldings(section.holdings, list.filter, now), list.holdingSort);
   const total = sizeOf(section);
   const shown = flips.length + holdings.length + section.unmatched.length;
 
   return (
     <>
-      <FolderHeader folder={folder} itemCount={total} onChange={onChange} onDeleted={onDeleted} />
-      {flips.length > 0 && <FlipHeadline summary={summarizeSettled(flips)} filtered={!isUnfiltered(settings.filter)} />}
-      <ListToolbar settings={settings} shown={shown} total={total} noun="item" />
-      {total === 0 && <EmptyState text="This folder is empty. Select rows in Flips or Holding and move them here." />}
+      <FolderHeader folder={folder} itemCount={total} onChange={list.onChange} onDeleted={onDeleted} />
+      {flips.length > 0 && <FlipSummary summary={summarizeSettled(flips)} filtered={!isUnfiltered(list.filter)} />}
+      <ListControls list={list} shown={shown} total={total} noun="item" periodLabel="When" showFlipFilters folderId={folder.id} />
+      {total === 0 && <EmptyState text="This folder is empty. Select rows on another sheet and move them here." />}
       {total > 0 && shown === 0 && <EmptyState text="Nothing in this folder matches these filters." />}
       <FolderSection title="Flips" visible={flips.length > 0}>
-        <FlipList flips={flips} mode={settings.mode} sort={settings.flipSort} onSort={settings.setFlipSort} selection={settings.selection} onChange={onChange} />
+        <FlipSheet flips={flips} sort={list.flipSort} onSort={list.setFlipSort} selection={list.selection} newSince={list.newSince} onChange={list.onChange} />
       </FolderSection>
       <FolderSection title="Holding" visible={holdings.length > 0}>
-        <HoldingList buys={holdings} mode={settings.mode} sort={settings.holdingSort} onSort={settings.setHoldingSort} selection={settings.selection} />
+        <HoldingSheet buys={holdings} sort={list.holdingSort} onSort={list.setHoldingSort} selection={list.selection} newSince={list.newSince} />
       </FolderSection>
-      {section.unmatched.length > 0 && <ReviewPanel unmatched={section.unmatched} selection={settings.selection} onChange={onChange} />}
+      {section.unmatched.length > 0 && <ReviewPanel unmatched={section.unmatched} selection={list.selection} onChange={list.onChange} />}
     </>
   );
 }
@@ -192,18 +205,52 @@ function FolderSection({ title, visible, children }: { title: string; visible: b
   );
 }
 
-function ListToolbar({ settings, shown, total, noun }: { settings: ListSettings; shown: number; total: number; noun: string }) {
+interface ListControlsProps {
+  list: ListContext;
+  shown: number;
+  total: number;
+  noun: string;
+  periodLabel: string;
+  /** Holdings haven't been sold, so result and match filters don't apply to them. */
+  showFlipFilters: boolean;
+  folderId?: string;
+}
+
+function ListControls({ list, shown, total, noun, periodLabel, showFlipFilters, folderId }: ListControlsProps) {
   return (
-    <Toolbar
-      query={settings.filter.query}
-      onQuery={(query) => settings.setFilter({ ...settings.filter, query })}
-      shown={shown}
-      total={total}
-      noun={noun}
-      mode={settings.mode}
-      onMode={settings.setMode}
-    />
+    <>
+      <Toolbar
+        query={list.filter.query}
+        onQuery={(query) => list.setFilter({ ...list.filter, query })}
+        activeFilters={countActiveFilters(list.filter)}
+        filtersOpen={list.filtersOpen}
+        onToggleFilters={list.toggleFilters}
+        shown={shown}
+        total={total}
+        noun={noun}
+        selection={list.selection}
+        folders={list.folders}
+        currentFolderId={folderId}
+        onChange={list.onChange}
+      />
+      {list.filtersOpen && (
+        <FilterDrawer filter={list.filter} onChange={list.setFilter} showFlipFilters={showFlipFilters} periodLabel={periodLabel} />
+      )}
+    </>
   );
+}
+
+/** Escape drops the selection, unless the user is typing in a field. */
+function useEscapeToClear(selection: Selection) {
+  const { clear } = selection;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || (event.target as HTMLElement).closest('input, textarea')) return;
+      clear();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [clear]);
 }
 
 function sizeOf(section: Section): number {
@@ -219,7 +266,7 @@ function countPlaces({ shelved }: Journal): PlaceCounts {
   };
 }
 
-function reviewHeadline(count: number): string {
+function reviewTitle(count: number): string {
   if (count === 0) return 'Every sale is paired with its buy.';
   return count === 1 ? '1 sale needs a look.' : `${count} sales need a look.`;
 }

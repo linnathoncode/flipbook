@@ -1,5 +1,8 @@
 import { useEffect, useRef, type MouseEvent } from 'react';
+import { trackerDisplayName } from '../../domain/itemNames';
 import type { Sort } from '../../domain/listFilters';
+import type { Trade } from '../../domain/types';
+import { rarityColor } from '../rarity';
 import type { Entry, Selection } from '../useSelection';
 
 export function EmptyState({ text }: { text: string }) {
@@ -11,6 +14,28 @@ export function signClass(value: number): string {
   if (value > 0) return 'gain';
   if (value < 0) return 'loss';
   return '';
+}
+
+/** Whether a trade happened after `since`, e.g. the last visit. ISO strings compare in time order. */
+export function isAfter(iso: string, since?: string): boolean {
+  return since !== undefined && iso > since;
+}
+
+/** Rows typed into a spreadsheet keep the name the user wrote; synced rows use the tracker's naming. */
+export function itemLabel(trade: Trade): string {
+  return trade.source === 'xlsx' ? trade.item.itemName : trackerDisplayName(trade.item);
+}
+
+/** The name cell: CS2 rarity stripe, name, and NEW / PENDING tags. */
+export function ItemName({ trade, isNew = false }: { trade: Trade; isNew?: boolean }) {
+  return (
+    <span className="item-name">
+      <span className="rarity" style={{ background: rarityColor(trade.item) ?? 'transparent' }} aria-hidden="true" />
+      {itemLabel(trade)}
+      {isNew && <span className="tag tag-new">New</span>}
+      {trade.state === 'pending' && <span className="tag tag-pending">Pending</span>}
+    </span>
+  );
 }
 
 interface SortHeaderProps<Key extends string> {
@@ -38,6 +63,24 @@ export function SortHeader<Key extends string>({ label, sortKey, sort, onSort, c
   );
 }
 
+/**
+ * Spreadsheet selection on a whole row: click selects it, Ctrl/Cmd-click adds it, Shift-click selects a range.
+ * Clicks on the row's own buttons and links are left alone.
+ */
+export function selectableRow(entry: Entry, visible: Entry[], selection: Selection) {
+  const selected = selection.has(entry.key);
+  return {
+    className: `row ${selected ? 'is-selected' : ''}`,
+    'aria-selected': selected,
+    // Shift-click would otherwise also select the text between the two rows.
+    onMouseDown: (event: MouseEvent) => event.shiftKey && event.preventDefault(),
+    onClick: (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest('button, a, input')) return;
+      selection.click(entry, { add: event.ctrlKey || event.metaKey, range: event.shiftKey }, visible);
+    },
+  };
+}
+
 interface RowCheckProps {
   entry: Entry;
   visible: Entry[];
@@ -45,9 +88,10 @@ interface RowCheckProps {
   label: string;
 }
 
+/** The keyboard way in: a checkbox adds or removes its row, Shift extends a range. */
 export function RowCheck({ entry, visible, selection, label }: RowCheckProps) {
   // Click (not change) carries the shift key needed for range selection.
-  const onClick = (event: MouseEvent<HTMLInputElement>) => selection.toggle(entry, event.shiftKey, visible);
+  const onClick = (event: MouseEvent<HTMLInputElement>) => selection.click(entry, { add: true, range: event.shiftKey }, visible);
   return (
     <input
       type="checkbox"

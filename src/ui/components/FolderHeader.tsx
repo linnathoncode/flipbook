@@ -39,14 +39,14 @@ export function FolderHeader({ folder, itemCount, onChange, onDeleted }: Props) 
           aria-label="Folder name"
           maxLength={40}
         />
-        <button className="button button-small" type="submit">Save</button>
+        <button className="button" type="submit">Save</button>
       </form>
     );
   }
 
   return (
     <div className="folder-header">
-      <h1 className="folder-name">{folder.name}</h1>
+      <h1 className="page-title">{folder.name}</h1>
       <button className="text-button" onClick={() => { setName(folder.name); setEditing(true); }}>Rename</button>
       <button className="text-button text-button-danger" onClick={remove}>Delete folder</button>
     </div>

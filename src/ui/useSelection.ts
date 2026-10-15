@@ -6,11 +6,17 @@ export interface Entry {
   tradeIds: string[];
 }
 
+/** Ctrl/Cmd adds to the selection; Shift selects from the last clicked row. Same as a spreadsheet. */
+export interface Modifiers {
+  add: boolean;
+  range: boolean;
+}
+
 export interface Selection {
   count: number;
   has: (key: string) => boolean;
-  /** Shift-click selects everything between the last clicked row and this one. */
-  toggle: (entry: Entry, extendRange: boolean, visible: Entry[]) => void;
+  /** `visible` is the rows on screen, in order, so a range covers what the user sees. */
+  click: (entry: Entry, modifiers: Modifiers, visible: Entry[]) => void;
   setAll: (entries: Entry[], selected: boolean) => void;
   tradeIds: () => string[];
   clear: () => void;
@@ -20,24 +26,29 @@ export function useSelection(): Selection {
   const [selected, setSelected] = useState<ReadonlyMap<string, string[]>>(new Map());
   const anchor = useRef<string>();
 
-  const toggle = useCallback((entry: Entry, extendRange: boolean, visible: Entry[]) => {
-    // Read the anchor now: the updater below runs later, after it has moved to this row.
-    const previousAnchor = anchor.current;
-    setSelected((current) => {
-      const next = new Map(current);
-      const anchorIndex = visible.findIndex((candidate) => candidate.key === previousAnchor);
-      const index = visible.findIndex((candidate) => candidate.key === entry.key);
-      if (extendRange && anchorIndex !== -1 && index !== -1) {
-        const [from, to] = anchorIndex < index ? [anchorIndex, index] : [index, anchorIndex];
+  const click = useCallback((entry: Entry, { add, range }: Modifiers, visible: Entry[]) => {
+    const anchorIndex = visible.findIndex((candidate) => candidate.key === anchor.current);
+    const index = visible.findIndex((candidate) => candidate.key === entry.key);
+
+    if (range && anchorIndex !== -1 && index !== -1) {
+      // The anchor stays put, so a second shift-click resizes the range instead of chaining it.
+      const [from, to] = anchorIndex < index ? [anchorIndex, index] : [index, anchorIndex];
+      setSelected((current) => {
+        const next = new Map(add ? current : []);
         visible.slice(from, to + 1).forEach((inRange) => next.set(inRange.key, inRange.tradeIds));
-      } else if (next.has(entry.key)) {
-        next.delete(entry.key);
-      } else {
-        next.set(entry.key, entry.tradeIds);
-      }
+        return next;
+      });
+      return;
+    }
+
+    anchor.current = entry.key;
+    setSelected((current) => {
+      if (!add) return new Map([[entry.key, entry.tradeIds]]);
+      const next = new Map(current);
+      if (next.has(entry.key)) next.delete(entry.key);
+      else next.set(entry.key, entry.tradeIds);
       return next;
     });
-    anchor.current = entry.key;
   }, []);
 
   const setAll = useCallback((entries: Entry[], value: boolean) => {
@@ -56,7 +67,7 @@ export function useSelection(): Selection {
   return {
     count: selected.size,
     has: (key) => selected.has(key),
-    toggle,
+    click,
     setAll,
     tradeIds: () => [...selected.values()].flat(),
     clear,

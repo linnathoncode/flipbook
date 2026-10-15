@@ -1,9 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import ExcelJS from 'exceljs';
 import { buildFlip } from '../src/domain/profit';
 import { buildTrackerWorkbook } from '../src/io/exportWorkbook';
-import { readTrackerRows } from '../src/io/trackerWorkbook';
 import { skin, sticker, trade } from './builders';
 
 describe('buildTrackerWorkbook', () => {
@@ -26,26 +23,5 @@ describe('buildTrackerWorkbook', () => {
     expect(flips.getCell('F3').value).toBeNull();
     expect(workbook.getWorksheet('_meta')!.state).toBe('hidden');
     expect(workbook.getWorksheet('_meta')!.getCell('D2').value).toBe('exact');
-  });
-
-  it('reads back what it writes', async () => {
-    const buy = trade('buy', skin(), '2026-01-01T00:00:00Z', 765);
-    const buffer = await buildTrackerWorkbook({ flips: [], openBuys: [buy], defaultFeeRate: 0.02 });
-    const rows = await readTrackerRows(buffer);
-    expect(rows).toEqual([
-      { rowNumber: 2, skinName: 'AK-47 | Slate - MW', buyPrice: 7.65, sellPrice: undefined, buyDate: '2026-01-01T00:00:00.000Z' },
-    ]);
-  });
-});
-
-const trackerPath = resolve(__dirname, 'fixtures/cs trades.xlsx');
-const describeWithTracker = existsSync(trackerPath) ? describe : describe.skip;
-
-describeWithTracker('real tracker', () => {
-  it('finds the header at C1 and reads every flip row', async () => {
-    const rows = await readTrackerRows(readFileSync(trackerPath).buffer as ArrayBuffer);
-    expect(rows.length).toBeGreaterThan(50);
-    expect(rows[0]).toMatchObject({ rowNumber: 2, skinName: 'MP9 | Rose Iron - FN', buyPrice: 7.65, sellPrice: 8.15 });
-    expect(rows[0].buyDate).toMatch(/^2026-/);
   });
 });

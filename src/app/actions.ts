@@ -1,7 +1,5 @@
-import type { CsfloatTradesPage } from '../domain/csfloatTrades';
 import { shelve, type Folder } from '../domain/folders';
 import { buildJournalView } from '../domain/journal';
-import { reconcileTrackerRows } from '../domain/trackerRows';
 import {
   deleteFolder,
   loadFolders,
@@ -13,12 +11,8 @@ import {
   placeTrades,
   saveFolder,
   saveSettings,
-  saveTrades,
   unlockMatch,
 } from '../io/journalStore';
-import { storeCsfloatTrades, type ImportSummary } from './sync';
-
-export type { ImportSummary };
 
 export async function loadJournal() {
   const [trades, lockedMatches, settings, folders, placements] = await Promise.all([
@@ -34,21 +28,6 @@ export async function loadJournal() {
 }
 
 export type Journal = Awaited<ReturnType<typeof loadJournal>>;
-
-export async function importTradesJson(file: File): Promise<ImportSummary> {
-  const page = JSON.parse(await file.text()) as CsfloatTradesPage;
-  if (!Array.isArray(page.trades)) throw new Error('This file is not a CSFloat trades export.');
-  return storeCsfloatTrades(page.trades);
-}
-
-export async function importTrackerWorkbook(file: File): Promise<ImportSummary> {
-  const { readTrackerRows } = await loadSpreadsheetModule('read');
-  const rows = await readTrackerRows(await file.arrayBuffer());
-  const { newTrades, lockedMatches } = reconcileTrackerRows(rows, await loadTrades());
-  await saveTrades(newTrades);
-  await Promise.all(lockedMatches.map(lockMatch));
-  return { added: newTrades.length, total: rows.length };
-}
 
 export async function lockManualMatch(sellId: string, buyId: string): Promise<void> {
   await lockMatch({ sellId, buyId, confidence: 'manual' });
@@ -78,7 +57,8 @@ export async function moveTrades(tradeIds: string[], folderId: string | null): P
 /** Exports the main book only: folders hold what isn't part of the flip record. */
 export async function exportWorkbook(): Promise<Blob> {
   const { shelved, settings } = await loadJournal();
-  const { buildTrackerWorkbook } = await loadSpreadsheetModule('write');
+  // ExcelJS is most of the bundle, so it's only loaded when a spreadsheet is actually written.
+  const { buildTrackerWorkbook } = await import('../io/exportWorkbook');
   const buffer = await buildTrackerWorkbook({
     flips: shelved.book.flips,
     openBuys: shelved.book.holdings,
@@ -89,11 +69,4 @@ export async function exportWorkbook(): Promise<Blob> {
 
 export async function updateFeeRate(feeRate: number): Promise<void> {
   await saveSettings({ ...(await loadSettings()), feeRate });
-}
-
-/** ExcelJS is most of the bundle, so it's only loaded when a spreadsheet is actually read or written. */
-function loadSpreadsheetModule(mode: 'read'): Promise<typeof import('../io/trackerWorkbook')>;
-function loadSpreadsheetModule(mode: 'write'): Promise<typeof import('../io/exportWorkbook')>;
-function loadSpreadsheetModule(mode: 'read' | 'write') {
-  return mode === 'read' ? import('../io/trackerWorkbook') : import('../io/exportWorkbook');
 }

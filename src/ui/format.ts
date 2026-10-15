@@ -1,6 +1,5 @@
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const signedCurrency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', signDisplay: 'exceptZero' });
-const date = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const shortDate = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
 const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
@@ -11,7 +10,6 @@ const DAY_MS = 24 * HOUR_MS;
 export const formatMoney = (dollars: number) => currency.format(dollars);
 export const formatSignedMoney = (dollars: number) => signedCurrency.format(dollars);
 export const formatPercent = (percent: number) => `${percent >= 0 ? '+' : ''}${percent.toFixed(1)}%`;
-export const formatDate = (iso: string) => date.format(new Date(iso));
 /** 2026-10-15: sortable and compact, for the sheet view. */
 export const formatIsoDate = (iso: string) => shortDate.format(new Date(iso));
 export const formatFloat = (value?: number) => (value === undefined ? '' : value.toFixed(6));

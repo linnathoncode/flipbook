@@ -1,11 +1,10 @@
 import { lockManualMatch } from '../../app/actions';
 import type { UnmatchedEntry } from '../../domain/journal';
 import { centsToDollars } from '../../domain/profit';
-import { formatDate, formatFloat, formatMoney } from '../format';
+import { formatFloat, formatIsoDate, formatMoney } from '../format';
 import { entryKey } from '../places';
 import type { Entry, Selection } from '../useSelection';
-import { ItemCell } from './ItemCell';
-import { EmptyState, RowCheck, SelectAllCheck } from './shared';
+import { EmptyState, itemLabel, ItemName, RowCheck, SelectAllCheck, selectableRow } from './shared';
 
 interface Props {
   unmatched: UnmatchedEntry[];
@@ -13,7 +12,7 @@ interface Props {
   onChange: () => void;
 }
 
-export function saleEntry(entry: UnmatchedEntry): Entry {
+function saleEntry(entry: UnmatchedEntry): Entry {
   return { key: entryKey.sale(entry.sell.id), tradeIds: [entry.sell.id] };
 }
 
@@ -45,19 +44,18 @@ function PickBuy({ entries, onChange }: { entries: UnmatchedEntry[]; onChange: (
         {entries.map(({ sell, candidates }) => (
           <li key={sell.id} className="review-item">
             <div className="review-sell">
-              <ItemCell trade={sell} />
-              <span className="side">
-                <span className="price">{formatMoney(centsToDollars(sell.priceCents))}</span>
-                <span className="when">Sold {formatDate(sell.at)}</span>
-              </span>
+              <ItemName trade={sell} />
+              <span className="mono">Sold {formatIsoDate(sell.at)} for {formatMoney(centsToDollars(sell.priceCents))}</span>
             </div>
-            {candidates.map((buy) => (
-              <button key={buy.id} className="candidate" onClick={() => choose(sell.id, buy.id)}>
-                <span className="mono">{formatMoney(centsToDollars(buy.priceCents))}</span>
-                <span>Bought {formatDate(buy.at)}</span>
-                {buy.item.floatValue !== undefined && <span className="mono">{formatFloat(buy.item.floatValue)}</span>}
-              </button>
-            ))}
+            <div className="candidates">
+              {candidates.map((buy) => (
+                <button key={buy.id} className="button" onClick={() => choose(sell.id, buy.id)}>
+                  <span className="mono">{formatMoney(centsToDollars(buy.priceCents))}</span>
+                  <span>bought {formatIsoDate(buy.at)}</span>
+                  {buy.item.floatValue !== undefined && <span className="mono muted">{formatFloat(buy.item.floatValue)}</span>}
+                </button>
+              ))}
+            </div>
           </li>
         ))}
       </ul>
@@ -71,31 +69,37 @@ function SoldWithoutBuy({ entries, selection }: { entries: UnmatchedEntry[]; sel
     <section>
       <h2 className="section-title">Sold with no buy on record</h2>
       <p className="section-hint">
-        These were bought outside CSFloat or before your history starts. Import your spreadsheet to pair them,
-        or select them and move them to a folder.
+        Bought outside CSFloat or before your history starts. Select them and move them to a folder to keep the book clean.
       </p>
-      <table className="ledger is-compact">
-        <thead>
-          <tr>
-            <th className="check-cell"><SelectAllCheck visible={visible} selection={selection} /></th>
-            <th>Item</th>
-            <th className="side">Sold</th>
-            <th className="num">Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map(({ sell }, index) => (
-            <tr key={sell.id} className={selection.has(visible[index].key) ? 'is-selected' : ''}>
-              <td className="check-cell">
-                <RowCheck entry={visible[index]} visible={visible} selection={selection} label={sell.item.marketHashName} />
-              </td>
-              <td><ItemCell trade={sell} compact /></td>
-              <td className="side"><span className="when">{formatDate(sell.at)}</span></td>
-              <td className="num"><span className="price">{formatMoney(centsToDollars(sell.priceCents))}</span></td>
+      <div className="sheet-scroll">
+        <table className="sheet">
+          <thead>
+            <tr>
+              <th className="check-cell"><SelectAllCheck visible={visible} selection={selection} /></th>
+              <th>Sold</th>
+              <th>Skin name</th>
+              <th className="num">Float</th>
+              <th className="num">Sell price</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {entries.map(({ sell }, index) => {
+              const entry = visible[index];
+              return (
+                <tr key={entry.key} {...selectableRow(entry, visible, selection)}>
+                  <td className="check-cell">
+                    <RowCheck entry={entry} visible={visible} selection={selection} label={itemLabel(sell)} />
+                  </td>
+                  <td className="mono">{formatIsoDate(sell.at)}</td>
+                  <td><ItemName trade={sell} /></td>
+                  <td className="num mono muted">{formatFloat(sell.item.floatValue)}</td>
+                  <td className="num mono">{formatMoney(centsToDollars(sell.priceCents))}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
