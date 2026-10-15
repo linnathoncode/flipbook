@@ -86,6 +86,7 @@ function trackerTrade(row: TrackerRow, side: TradeSide, dollars: number, at: str
       marketHashName: row.skinName.trim(),
       itemName: row.skinName.trim(),
       type: UNKNOWN_TYPE,
+      isStarred: row.skinName.trim().startsWith('★'),
       isStatTrak: false,
       isSouvenir: false,
     },

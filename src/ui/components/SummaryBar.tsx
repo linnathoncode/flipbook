@@ -1,29 +1,22 @@
 import type { ProfitSummary } from '../../domain/profit';
-import { formatDate, formatMoney, formatPercent } from '../format';
+import { formatPercent, formatSignedMoney } from '../format';
 import { signClass } from './shared';
 
-interface Props {
-  summary: ProfitSummary;
-  lastSyncAt?: string;
+/** The book's bottom line, written as one sentence rather than a row of stat tiles. */
+export function SummaryBar({ summary }: { summary: ProfitSummary }) {
+  if (summary.flipCount === 0) {
+    return <p className="ledger-line">No settled flips yet.</p>;
+  }
+  return (
+    <p className="ledger-line">
+      <Figure value={summary.flipCount} text={String(summary.flipCount)} /> settled flips,{' '}
+      <Figure value={summary.totalProfit} text={formatSignedMoney(summary.totalProfit)} signed /> net.{' '}
+      <Figure value={summary.averagePercent} text={formatPercent(summary.averagePercent)} signed /> per flip on average,{' '}
+      <Figure value={summary.weightedAveragePercent} text={formatPercent(summary.weightedAveragePercent)} signed /> weighted by cost.
+    </p>
+  );
 }
 
-export function SummaryBar({ summary, lastSyncAt }: Props) {
-  const tiles = [
-    { label: 'Total profit', value: formatMoney(summary.totalProfit), sign: summary.totalProfit },
-    { label: 'Avg %', value: formatPercent(summary.averagePercent), sign: summary.averagePercent },
-    { label: 'Weighted avg %', value: formatPercent(summary.weightedAveragePercent), sign: summary.weightedAveragePercent },
-    { label: 'Settled flips', value: String(summary.flipCount), sign: 0 },
-  ];
-
-  return (
-    <section className="summary">
-      {tiles.map((tile) => (
-        <div key={tile.label} className="tile">
-          <span className="tile-label">{tile.label}</span>
-          <span className={`tile-value ${signClass(tile.sign)}`}>{tile.value}</span>
-        </div>
-      ))}
-      <p className="muted sync-note">{lastSyncAt ? `Synced ${formatDate(lastSyncAt)}` : 'Never synced'}</p>
-    </section>
-  );
+function Figure({ value, text, signed = false }: { value: number; text: string; signed?: boolean }) {
+  return <strong className={`figure ${signed ? signClass(value) : ''}`}>{text}</strong>;
 }

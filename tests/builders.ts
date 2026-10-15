@@ -8,6 +8,7 @@ export function skin(overrides: Partial<Item> = {}): Item {
     itemName: 'AK-47 | Slate',
     wearName: 'Minimal Wear',
     type: 'skin',
+    isStarred: false,
     defIndex: 7,
     paintIndex: 1035,
     paintSeed: 101,
@@ -19,7 +20,7 @@ export function skin(overrides: Partial<Item> = {}): Item {
 }
 
 export function sticker(name = 'Sticker | Lil Ava'): Item {
-  return { marketHashName: name, itemName: name, type: 'sticker', isStatTrak: false, isSouvenir: false };
+  return { marketHashName: name, itemName: name, type: 'sticker', isStarred: false, isStatTrak: false, isSouvenir: false };
 }
 
 export function trade(side: Trade['side'], item: Item, at: string, priceCents = 1000): Trade {

@@ -18,6 +18,7 @@ interface CsfloatItem {
   item_name?: string;
   wear_name?: string;
   type?: string;
+  rarity_name?: string;
   def_index?: number;
   paint_index?: number;
   paint_seed?: number;
@@ -34,6 +35,7 @@ export interface CsfloatTradesPage {
   count: number;
 }
 
+const STAR = '★';
 const KEPT_STATES: ReadonlySet<string> = new Set<TradeState>(['verified', 'pending']);
 
 /**
@@ -69,6 +71,8 @@ function normalizeItem(raw: CsfloatItem): Item {
     itemName: raw.item_name ?? raw.market_hash_name,
     wearName: raw.wear_name,
     type: raw.type ?? UNKNOWN_TYPE,
+    rarityName: raw.rarity_name,
+    isStarred: raw.market_hash_name.startsWith(STAR),
     defIndex: raw.def_index,
     paintIndex: raw.paint_index,
     paintSeed: raw.paint_seed,

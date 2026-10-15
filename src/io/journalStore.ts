@@ -17,7 +17,7 @@ interface JournalSchema extends DBSchema {
   meta: { key: string; value: Settings };
 }
 
-const DB_NAME = 'csfloat-trade-journal';
+const DB_NAME = 'flipbook';
 const DB_VERSION = 1;
 
 let dbPromise: Promise<IDBPDatabase<JournalSchema>> | undefined;

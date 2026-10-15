@@ -13,6 +13,10 @@ export interface Item {
   itemName: string;
   wearName?: string;
   type: string;
+  /** CS2 rarity tier as the game names it, e.g. "Classified". */
+  rarityName?: string;
+  /** ★ items: knives and gloves. */
+  isStarred: boolean;
   defIndex?: number;
   paintIndex?: number;
   paintSeed?: number;

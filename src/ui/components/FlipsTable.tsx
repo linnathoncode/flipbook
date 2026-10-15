@@ -1,19 +1,19 @@
 import { releaseManualMatch } from '../../app/actions';
 import type { Flip } from '../../domain/profit';
 import type { MatchConfidence } from '../../domain/types';
-import { formatDate, formatMoney, formatPercent } from '../format';
+import { formatDate, formatMoney, formatPercent, formatSignedMoney } from '../format';
 import { ItemCell } from './ItemCell';
 import { EmptyState, signClass } from './shared';
 
-const CONFIDENCE_LABEL: Record<MatchConfidence, string> = {
-  exact: 'exact',
-  fifo: 'FIFO',
-  suggested: 'check',
-  tracker: 'tracker',
-  manual: 'manual',
+const CONFIDENCE: Record<MatchConfidence, { label: string; hint: string }> = {
+  exact: { label: 'Exact', hint: 'Same float, seed and pattern' },
+  fifo: { label: 'FIFO', hint: 'Interchangeable item, oldest buy closed first' },
+  suggested: { label: 'Check', hint: 'Only same-name buy found. Probably right, worth a look' },
+  tracker: { label: 'Tracker', hint: 'Paired on a row of your spreadsheet' },
+  manual: { label: 'Manual', hint: 'You chose this pairing' },
 };
 
-const RELEASABLE: ReadonlySet<MatchConfidence> = new Set(['manual', 'tracker']);
+const UNLINKABLE: ReadonlySet<MatchConfidence> = new Set(['manual', 'tracker']);
 
 interface Props {
   flips: Flip[];
@@ -21,49 +21,61 @@ interface Props {
 }
 
 export function FlipsTable({ flips, onChange }: Props) {
-  if (flips.length === 0) return <EmptyState text="No flips yet. Sync or import trades from the Import tab." />;
+  if (flips.length === 0) {
+    return <EmptyState text="No flips yet. Sync your CSFloat trades from the Data tab." />;
+  }
 
-  const release = async (sellId: string) => {
+  const unlink = async (sellId: string) => {
     await releaseManualMatch(sellId);
     onChange();
   };
 
   return (
-    <table className="table">
+    <table className="ledger">
       <thead>
         <tr>
           <th>Item</th>
-          <th>Bought</th>
-          <th>Sold</th>
-          <th className="num">Buy</th>
-          <th className="num">Sell</th>
+          <th className="side">Bought</th>
+          <th className="fold" aria-hidden="true" />
+          <th className="side">Sold</th>
           <th className="num">Fee</th>
           <th className="num">Net</th>
-          <th className="num">%</th>
           <th>Match</th>
         </tr>
       </thead>
       <tbody>
-        {flips.map((flip) => (
-          <tr key={flip.sell.id}>
-            <td><ItemCell trade={flip.buy} /></td>
-            <td>{formatDate(flip.buy.at)}</td>
-            <td>{flip.sell.source === 'xlsx' ? '—' : formatDate(flip.sell.at)}</td>
-            <td className="num">{formatMoney(flip.buyPrice)}</td>
-            <td className="num">{formatMoney(flip.sellPrice)}</td>
-            <td className="num muted">{formatMoney(flip.fee)}</td>
-            <td className={`num ${signClass(flip.netProfit)}`}>{formatMoney(flip.netProfit)}</td>
-            <td className={`num ${signClass(flip.profitPercent)}`}>{formatPercent(flip.profitPercent)}</td>
-            <td>
-              <span className={`badge ${flip.match.confidence}`}>{CONFIDENCE_LABEL[flip.match.confidence]}</span>
-              {RELEASABLE.has(flip.match.confidence) && (
-                <button className="link" onClick={() => release(flip.sell.id)} title="Let the matcher decide again">
-                  unlink
-                </button>
-              )}
-            </td>
-          </tr>
-        ))}
+        {flips.map((flip) => {
+          const confidence = CONFIDENCE[flip.match.confidence];
+          return (
+            <tr key={flip.sell.id}>
+              <td><ItemCell trade={flip.buy} /></td>
+              <td className="side">
+                <span className="price">{formatMoney(flip.buyPrice)}</span>
+                <span className="when">{formatDate(flip.buy.at)}</span>
+              </td>
+              <td className="fold" aria-hidden="true" />
+              <td className="side">
+                <span className="price">{formatMoney(flip.sellPrice)}</span>
+                <span className="when">{flip.sell.source === 'xlsx' ? 'Date not recorded' : formatDate(flip.sell.at)}</span>
+              </td>
+              <td className="num muted mono">{formatMoney(flip.fee)}</td>
+              <td className={`num ${signClass(flip.netProfit)}`}>
+                <span className="price">{formatSignedMoney(flip.netProfit)}</span>
+                <span className="when">{formatPercent(flip.profitPercent)}</span>
+              </td>
+              <td>
+                <span className={`tag tag-${flip.match.confidence}`} title={confidence.hint}>
+                  {confidence.label}
+                </span>
+                {UNLINKABLE.has(flip.match.confidence) && (
+                  <button className="text-button" onClick={() => unlink(flip.sell.id)} title="Let Flipbook match this sell again">
+                    Unlink
+                  </button>
+                )}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

@@ -1,4 +1,4 @@
-# CSFloat Trade Journal — Plan (v2)
+# Flipbook — Plan (v2)
 
 Reworks the original `cs-trade-journal-project.md` after checking it against real data
 (a `trades.json` export; `cs trades.xlsx`, Flips sheet).

@@ -1,5 +1,5 @@
 export function EmptyState({ text }: { text: string }) {
-  return <p className="empty muted">{text}</p>;
+  return <p className="empty">{text}</p>;
 }
 
 /** CSS class that colors a number by whether it's a gain or a loss. */
