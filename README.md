@@ -1,66 +1,92 @@
 # Flipbook
 
-A CS2 trade journal for CSFloat. A Chrome extension that pairs your buys with your sells and shows what each flip made.
-Everything is stored locally in the browser (IndexedDB). There is no backend and no API key.
+A Chrome extension that keeps a trade journal for your CSFloat account. It pairs each item you sold with the buy it came from,
+and shows what every flip made after fees.
 
-See [PLAN.md](PLAN.md) for the design and why it differs from the first draft.
+Everything stays in your browser. There's no account to make, no server and no API key.
 
-## Use it
+## Set it up
+
+You need [Node.js](https://nodejs.org) 20 or newer, [Git](https://git-scm.com), and Google Chrome.
+Other Chromium browsers like Edge or Brave should work the same way.
+
+1. Download and build it:
+
+   ```sh
+   git clone https://github.com/linnathoncode/flipbook.git
+   cd flipbook
+   npm install
+   npm run build
+   ```
+
+   This creates a `dist` folder. That folder is the extension.
+
+2. Open `chrome://extensions` in Chrome.
+3. Turn on **Developer mode** (top right).
+4. Click **Load unpacked** and choose the `dist` folder.
+5. Pin Flipbook from the puzzle-piece menu so its red icon stays in the toolbar.
+
+## First run
+
+1. Log in to [csfloat.com](https://csfloat.com) in the same Chrome profile.
+2. Click the Flipbook icon. It opens in its own tab and starts reading your trade history from CSFloat.
+   If no CSFloat tab is open, it opens one for you. Leave that tab open until the sync finishes.
+3. Your sales show up on the **Flips** sheet, each paired with its buy.
+
+After that, Flipbook syncs on its own whenever a CSFloat tab loads, every 30 minutes while one is open,
+and when you open Flipbook. **Sync now** at the top forces a sync.
+
+## Using it
+
+- **Flips** shows every sale with its buy, the fee, net profit and profit %. Newest buys are on top, and trades since your last visit are tagged **New**.
+- **Holding** shows what you bought and haven't sold yet.
+- **Needs review** lists sales Flipbook couldn't pair on its own. Pick the right buy, or move them to a folder.
+- **Folders** keep cases, long holds or gifts out of your flip totals. Select rows, then use **Move to**.
+- **Selecting rows** works like a spreadsheet: click a row, Ctrl-click (Cmd on a Mac) to add more, Shift-click for a range, Escape to clear.
+- **Filters** narrows by item type, period, win or loss, and how the trade was paired. Click a column header to sort.
+- **Export .xlsx** saves your Flips sheet as an Excel file with working formulas.
+- **Settings** changes the seller fee (2% by default).
+- The sun/moon button switches between light and dark.
+
+### What the Match column means
+
+| Tag | Meaning |
+|---|---|
+| Exact | The same skin, matched by its float and pattern |
+| FIFO | Stickers, cases and other items without a float are paired oldest buy first |
+| Check | Only one earlier buy has the same name. Probably right, but worth a look |
+| Manual | You picked the buy in Needs review |
+
+## Update
 
 ```sh
+git pull
 npm install
 npm run build
 ```
 
-Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick `dist/`.
-Click the Flipbook icon in the toolbar to open it.
+Then click the reload arrow on Flipbook in `chrome://extensions`. Your data is kept.
 
-1. Log in to csfloat.com in the same browser.
-2. Open or refresh a CSFloat tab. Flipbook syncs your full trade history through your session on its own:
-   whenever a CSFloat tab loads, every 30 minutes while one is open, and when you open Flipbook with data older than 10 minutes.
-   **Sync now** in the header forces one.
-3. Flipbook opens on your **Flips** sheet: newest buys on top, totals above, and a **New** tag on trades since your last visit.
-4. Select rows like in a spreadsheet: click a row, Ctrl-click (Cmd on a Mac) to add one, Shift-click for a range, Escape to clear.
-   Move the selection into a **folder** to keep cases, long holds or gifts out of the book. Folders keep their own totals
-   and stay out of the main book and the export.
-5. **Filters** opens filters by item type, period, result and match. Click a column header to sort.
-6. The tabs along the bottom switch sheets: **Flips**, **Holding**, **Needs review** (sales Flipbook couldn't pair on its own)
-   and one per folder. **Export .xlsx** gives you the Flips sheet back with live formulas.
-7. The sun/moon button switches between light and dark. It follows your system until you pick one.
+## Problems
 
-## How matching works
+- **Sync fails or finds nothing:** make sure you're logged in to csfloat.com in the same Chrome profile, then open a CSFloat tab and click **Sync now**.
+  Any error shows at the top of Flipbook.
+- **A sale isn't paired:** it was probably bought outside CSFloat, or before your CSFloat history starts. It'll be in **Needs review**.
+- **The extension shows an error in `chrome://extensions`:** run `npm run build` again and reload it.
 
-| Tag | Meaning |
-|---|---|
-| Exact | Same skin: def index, paint index, paint seed and float all equal |
-| FIFO | Stickers, cases, pins and other float-less items close oldest buy first |
-| Check | Only one earlier buy has the same name. Probably right, but worth a look |
-| Tracker | Paired on a row of a spreadsheet imported by an earlier version |
-| Manual | You chose it in Needs review |
+## Your data
 
-Asset IDs aren't used, because Steam issues a new one on every trade.
+Flipbook reads your trades through the CSFloat tab you're already logged in to. It never sees your password and never stores a key or token.
+Your journal is stored in the browser on this computer only, and nothing is sent anywhere else.
 
-## Design
+**Removing the extension deletes your journal.** Export to .xlsx first if you want to keep it.
 
-Swiss Ledger: black, white and one red, in light and dark. Heavy Archivo for headings and figures, JetBrains Mono for numbers,
-thick rules instead of boxes, and spreadsheet tabs along the bottom. The only other colors are CS2's own rarity stripes,
-so a glance at an item means what it does in game. The icon is a red tile with its corner folded over, like a turned ledger page.
-It uses no CSFloat or Valve logos. Fonts are bundled, so the extension makes no font requests.
-
-## Develop
+## For developers
 
 ```sh
-npm test          # vitest
+npm run dev        # rebuild dist/ on every change, then reload the extension
+npm test
 npm run typecheck
-npm run dev       # rebuild dist/ on change; reload the extension in chrome://extensions
 ```
 
-```
-src/domain   pure logic: normalizing, matching, profit, name keys (no I/O, fully tested)
-src/io       IndexedDB, CSFloat sync, Excel export
-src/app      use cases the UI calls
-src/ui       React dashboard
-```
-
-Tests that use a real export read `tests/fixtures/trades.json`.
-Those files hold personal data, so they're gitignored, and those tests skip when the files are missing.
+[PLAN.md](PLAN.md) explains how matching works and why it's built this way.
