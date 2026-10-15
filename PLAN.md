@@ -1,7 +1,7 @@
 # CSFloat Trade Journal — Plan (v2)
 
 Reworks the original `cs-trade-journal-project.md` after checking it against real data
-(a `trades.json` export; `cs trades.xlsx`, Flips + TradeUps sheets).
+(a `trades.json` export; `cs trades.xlsx`, Flips sheet).
 
 ## What changed from v1, and why
 
@@ -11,7 +11,7 @@ Reworks the original `cs-trade-journal-project.md` after checking it against rea
 | Capture sells by scraping CSFloat sell pages | `/me/trades` already returns both sides with price, item, state | **Sync** from CSFloat's own API using the user's logged-in session (request runs inside a csfloat.com tab, so the browser attaches the session cookie — no API key is ever read or stored). DOM scraping dropped |
 | One `trades.json` import is the source | Export reports a `count` higher than the trades it contains → older buys missing (this is why the earlier CSV needed `fallback_oldest_json_date`) | Sync paginates until `count` is reached. `trades.json` import kept as offline fallback |
 | Items without float are edge cases | Many buys are stickers; cases/pins/patches/music kits also lack float | Non-float items are **commodities**: matched FIFO by `market_hash_name` |
-| Tracker columns: Skin Name, Buy Price, … | Flips sheet now: `Buy Date, Skin Name, Buy Price, Sell Price, Total Fees, Net Profit, Profit Percentage` at C1, summary `Total Profit, Avg %, Weighted Avg %` at J1:L2; separate **TradeUps** sheet | Import and export follow the actual layout (header auto-detected); TradeUps sheet carried through untouched |
+| Tracker columns: Skin Name, Buy Price, … | Flips sheet now: `Buy Date, Skin Name, Buy Price, Sell Price, Total Fees, Net Profit, Profit Percentage` at C1, summary `Total Profit, Avg %, Weighted Avg %` at J1:L2 | Import and export follow the actual layout (header auto-detected) |
 | Exact matching on IDs | Prices are integer **cents**; `state` ∈ verified/pending/cancelled/failed | Store cents internally. Count `verified` as closed, show `pending` separately, skip `cancelled`/`failed` |
 
 ## Scope (MVP)
@@ -19,7 +19,7 @@ Reworks the original `cs-trade-journal-project.md` after checking it against rea
 A Chrome MV3 extension with a dashboard tab. All data stays in IndexedDB on the machine.
 It answers one question well: *what did I pay for each item I sold, and what did I make?*
 
-Not in MVP: price checking, external pricing APIs, deposit/withdraw fee allocation, multi-account.
+Not in scope: trade-ups. Not in MVP: price checking, external pricing APIs, deposit/withdraw fee allocation, multi-account.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ manifest.json (MV3)
     ├── import           trades.json (CSFloat) + cs trades.xlsx (existing tracker)
     ├── domain           pure TS: normalize → positions → matcher → P&L
     ├── db               IndexedDB (idb): trades, manualTrades, matchOverrides, settings
-    └── export           ExcelJS → Flips / TradeUps / _meta (hidden)
+    └── export           ExcelJS → Flips / _meta (hidden)
 ```
 
 Permissions: `storage`, `scripting`, `tabs`, host `https://csfloat.com/*`.
@@ -75,8 +75,7 @@ Same formulas as the Flips sheet so exported numbers reconcile with Excel.
   Each row → an `xlsx` buy (and a sell if Sell Price is set). Rows are linked to CSFloat trades by
   normalized name (`Famas`→`FAMAS`, `FT`→`(Field-Tested)`, `- T Agent` suffix stripped, whitespace collapsed)
   + price + date proximity, replacing the one-off CSV script.
-- **Export**: `Flips` sheet with live formulas at the same columns (C:L), `TradeUps` copied from the
-  imported workbook if present, hidden `_meta` sheet with trade IDs, float, seed, match confidence.
+- **Export**: `Flips` sheet with live formulas at the same columns (C:L), hidden `_meta` sheet with trade IDs, float, seed, match confidence.
 
 ## Dashboard screens
 
@@ -95,7 +94,7 @@ Same formulas as the Flips sheet so exported numbers reconcile with Excel.
 4. Sync from CSFloat session (paginated).
 5. Excel import (name normalizer) + export.
 6. Review UI for manual matches.
-7. Polish: manual trade entry (sales on other markets with their own fee), trade-ups.
+7. Polish: manual trade entry (sales on other markets with their own fee).
 
 ## Tests
 
