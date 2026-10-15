@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "CSFloat Trade Journal",
+  "version": "0.1.0",
+  "description": "Match your CSFloat buys to sells and track flip profit. Data stays on your machine.",
+  "action": { "default_title": "Open trade journal" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage", "scripting", "tabs"],
+  "host_permissions": ["https://csfloat.com/*"]
+}
