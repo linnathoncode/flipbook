@@ -1,33 +1,39 @@
-import {
-  detectOwnerSteamId,
-  normalizeCsfloatTrades,
-  type CsfloatTrade,
-  type CsfloatTradesPage,
-} from '../domain/csfloatTrades';
-import { reconcileTrackerRows } from '../domain/trackerRows';
+import type { CsfloatTradesPage } from '../domain/csfloatTrades';
+import { shelve, type Folder } from '../domain/folders';
 import { buildJournalView } from '../domain/journal';
-import { fetchAllCsfloatTrades } from '../io/csfloatSync';
+import { reconcileTrackerRows } from '../domain/trackerRows';
 import {
+  deleteFolder,
+  loadFolders,
   loadLockedMatches,
+  loadPlacements,
   loadSettings,
   loadTrades,
   lockMatch,
+  placeTrades,
+  saveFolder,
   saveSettings,
   saveTrades,
   unlockMatch,
 } from '../io/journalStore';
+import { storeCsfloatTrades, type ImportSummary } from './sync';
 
-export interface ImportSummary {
-  added: number;
-  total: number;
+export type { ImportSummary };
+
+export async function loadJournal() {
+  const [trades, lockedMatches, settings, folders, placements] = await Promise.all([
+    loadTrades(),
+    loadLockedMatches(),
+    loadSettings(),
+    loadFolders(),
+    loadPlacements(),
+  ]);
+  const view = buildJournalView(trades, lockedMatches, settings.feeRate);
+  const sortedFolders = folders.sort((a, b) => a.name.localeCompare(b.name));
+  return { settings, folders: sortedFolders, shelved: shelve(view, placements, sortedFolders) };
 }
 
-export async function syncFromCsfloat(): Promise<ImportSummary> {
-  const raw = await fetchAllCsfloatTrades();
-  const summary = await storeCsfloatTrades(raw);
-  await saveSettings({ ...(await loadSettings()), lastSyncAt: new Date().toISOString() });
-  return summary;
-}
+export type Journal = Awaited<ReturnType<typeof loadJournal>>;
 
 export async function importTradesJson(file: File): Promise<ImportSummary> {
   const page = JSON.parse(await file.text()) as CsfloatTradesPage;
@@ -52,17 +58,30 @@ export async function releaseManualMatch(sellId: string): Promise<void> {
   await unlockMatch(sellId);
 }
 
-export async function loadJournal() {
-  const [trades, lockedMatches, settings] = await Promise.all([loadTrades(), loadLockedMatches(), loadSettings()]);
-  return { view: buildJournalView(trades, lockedMatches, settings.feeRate), settings };
+export async function createFolder(name: string): Promise<Folder> {
+  const folder = { id: crypto.randomUUID(), name: name.trim() };
+  await saveFolder(folder);
+  return folder;
 }
 
+export async function renameFolder(folder: Folder, name: string): Promise<void> {
+  await saveFolder({ ...folder, name: name.trim() });
+}
+
+export { deleteFolder };
+
+/** A null folder moves the trades back into the main book. */
+export async function moveTrades(tradeIds: string[], folderId: string | null): Promise<void> {
+  await placeTrades(tradeIds, folderId);
+}
+
+/** Exports the main book only: folders hold what isn't part of the flip record. */
 export async function exportWorkbook(): Promise<Blob> {
-  const { view, settings } = await loadJournal();
+  const { shelved, settings } = await loadJournal();
   const { buildTrackerWorkbook } = await loadSpreadsheetModule('write');
   const buffer = await buildTrackerWorkbook({
-    flips: view.flips,
-    openBuys: view.openBuys,
+    flips: shelved.book.flips,
+    openBuys: shelved.book.holdings,
     defaultFeeRate: settings.feeRate,
   });
   return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -70,18 +89,6 @@ export async function exportWorkbook(): Promise<Blob> {
 
 export async function updateFeeRate(feeRate: number): Promise<void> {
   await saveSettings({ ...(await loadSettings()), feeRate });
-}
-
-async function storeCsfloatTrades(raw: CsfloatTrade[]): Promise<ImportSummary> {
-  const settings = await loadSettings();
-  const ownerSteamId = settings.ownerSteamId ?? detectOwnerSteamId(raw);
-  if (!ownerSteamId) throw new Error('Could not tell which Steam account these trades belong to.');
-  if (!settings.ownerSteamId) await saveSettings({ ...settings, ownerSteamId });
-
-  const existingIds = new Set((await loadTrades()).map((trade) => trade.id));
-  const trades = normalizeCsfloatTrades(raw, ownerSteamId);
-  await saveTrades(trades);
-  return { added: trades.filter((trade) => !existingIds.has(trade.id)).length, total: trades.length };
 }
 
 /** ExcelJS is most of the bundle, so it's only loaded when a spreadsheet is actually read or written. */

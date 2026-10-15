@@ -1,29 +1,22 @@
 import { releaseManualMatch } from '../../app/actions';
-import type { Flip } from '../../domain/profit';
+import { heldDays } from '../../domain/profit';
 import type { MatchConfidence } from '../../domain/types';
-import { formatDate, formatMoney, formatPercent, formatSignedMoney } from '../format';
+import { formatDate, formatDays, formatMoney, formatPercent, formatSignedMoney } from '../format';
+import { FlipSheet } from './FlipSheet';
+import { CONFIDENCE, flipEntry, type FlipListProps } from './flipRows';
 import { ItemCell } from './ItemCell';
-import { EmptyState, signClass } from './shared';
-
-const CONFIDENCE: Record<MatchConfidence, { label: string; hint: string }> = {
-  exact: { label: 'Exact', hint: 'Same float, seed and pattern' },
-  fifo: { label: 'FIFO', hint: 'Interchangeable item, oldest buy closed first' },
-  suggested: { label: 'Check', hint: 'Only same-name buy found. Probably right, worth a look' },
-  tracker: { label: 'Tracker', hint: 'Paired on a row of your spreadsheet' },
-  manual: { label: 'Manual', hint: 'You chose this pairing' },
-};
+import { RowCheck, SelectAllCheck, signClass, SortHeader } from './shared';
 
 const UNLINKABLE: ReadonlySet<MatchConfidence> = new Set(['manual', 'tracker']);
 
-interface Props {
-  flips: Flip[];
-  onChange: () => void;
+export function FlipList(props: FlipListProps) {
+  if (props.mode === 'sheet') return <FlipSheet {...props} />;
+  return <FlipLedger {...props} />;
 }
 
-export function FlipsTable({ flips, onChange }: Props) {
-  if (flips.length === 0) {
-    return <EmptyState text="No flips yet. Sync your CSFloat trades from the Data tab." />;
-  }
+function FlipLedger({ flips, mode, sort, onSort, selection, onChange }: FlipListProps) {
+  const visible = flips.map(flipEntry);
+  const header = { sort, onSort };
 
   const unlink = async (sellId: string) => {
     await releaseManualMatch(sellId);
@@ -31,24 +24,30 @@ export function FlipsTable({ flips, onChange }: Props) {
   };
 
   return (
-    <table className="ledger">
+    <table className={`ledger ${mode === 'compact' ? 'is-compact' : ''}`}>
       <thead>
         <tr>
-          <th>Item</th>
-          <th className="side">Bought</th>
+          <th className="check-cell"><SelectAllCheck visible={visible} selection={selection} /></th>
+          <SortHeader label="Item" sortKey="name" {...header} />
+          <SortHeader label="Bought" sortKey="bought" className="side" {...header} />
           <th className="fold" aria-hidden="true" />
-          <th className="side">Sold</th>
+          <SortHeader label="Sold" sortKey="sold" className="side" {...header} />
+          <SortHeader label="Held" sortKey="held" className="num" {...header} />
           <th className="num">Fee</th>
-          <th className="num">Net</th>
+          <SortHeader label="Net" sortKey="net" className="num" {...header} />
           <th>Match</th>
         </tr>
       </thead>
       <tbody>
-        {flips.map((flip) => {
+        {flips.map((flip, index) => {
           const confidence = CONFIDENCE[flip.match.confidence];
+          const entry = visible[index];
           return (
-            <tr key={flip.sell.id}>
-              <td><ItemCell trade={flip.buy} /></td>
+            <tr key={entry.key} className={selection.has(entry.key) ? 'is-selected' : ''}>
+              <td className="check-cell">
+                <RowCheck entry={entry} visible={visible} selection={selection} label={flip.buy.item.marketHashName} />
+              </td>
+              <td><ItemCell trade={flip.buy} compact={mode === 'compact'} /></td>
               <td className="side">
                 <span className="price">{formatMoney(flip.buyPrice)}</span>
                 <span className="when">{formatDate(flip.buy.at)}</span>
@@ -58,6 +57,7 @@ export function FlipsTable({ flips, onChange }: Props) {
                 <span className="price">{formatMoney(flip.sellPrice)}</span>
                 <span className="when">{flip.sell.source === 'xlsx' ? 'Date not recorded' : formatDate(flip.sell.at)}</span>
               </td>
+              <td className="num muted mono">{formatDays(heldDays(flip))}</td>
               <td className="num muted mono">{formatMoney(flip.fee)}</td>
               <td className={`num ${signClass(flip.netProfit)}`}>
                 <span className="price">{formatSignedMoney(flip.netProfit)}</span>
@@ -68,7 +68,7 @@ export function FlipsTable({ flips, onChange }: Props) {
                   {confidence.label}
                 </span>
                 {UNLINKABLE.has(flip.match.confidence) && (
-                  <button className="text-button" onClick={() => unlink(flip.sell.id)} title="Let Flipbook match this sell again">
+                  <button className="text-button" onClick={() => unlink(flip.sell.id)} title="Let Flipbook match this sale again">
                     Unlink
                   </button>
                 )}

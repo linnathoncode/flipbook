@@ -1,6 +1,7 @@
 import type { CSSProperties, SyntheticEvent } from 'react';
 import { trackerDisplayName } from '../../domain/itemNames';
 import type { Trade } from '../../domain/types';
+import { formatFloat } from '../format';
 import { rarityColor } from '../rarity';
 import { WearBar } from './WearBar';
 
@@ -12,13 +13,14 @@ function hideImage(event: SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.style.visibility = 'hidden';
 }
 
-export function ItemCell({ trade }: { trade: Trade }) {
+/** Compact drops the wear bar and shrinks the art so more rows fit on screen. */
+export function ItemCell({ trade, compact = false }: { trade: Trade; compact?: boolean }) {
   const { item } = trade;
   const name = trade.source === 'xlsx' ? item.itemName : trackerDisplayName(item);
   const spine = { '--rarity': rarityColor(item) ?? 'var(--rule)' } as CSSProperties;
 
   return (
-    <div className="item" style={spine}>
+    <div className={`item ${compact ? 'is-compact' : ''}`} style={spine}>
       {item.iconUrl ? (
         <img src={`${STEAM_IMAGE_CDN}${item.iconUrl}/${ICON_SIZE}`} alt="" loading="lazy" onError={hideImage} />
       ) : (
@@ -30,7 +32,7 @@ export function ItemCell({ trade }: { trade: Trade }) {
           {trade.state === 'pending' && <span className="tag tag-pending">Pending</span>}
         </span>
         <span className="item-detail">
-          {item.floatValue !== undefined && <WearBar float={item.floatValue} />}
+          {item.floatValue !== undefined && (compact ? <span className="mono">{formatFloat(item.floatValue)}</span> : <WearBar float={item.floatValue} />)}
           {item.paintSeed !== undefined && <span className="mono">seed {item.paintSeed}</span>}
           {trade.source === 'xlsx' && <span>From your tracker</span>}
         </span>

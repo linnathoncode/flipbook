@@ -45,6 +45,19 @@ export function summarize(flips: Flip[]): ProfitSummary {
   return { flipCount: flips.length, totalProfit, averagePercent, weightedAveragePercent };
 }
 
+/** Only flips where both trades are verified; pending trades can still be reversed by CSFloat. */
+export function summarizeSettled(flips: Flip[]): ProfitSummary {
+  return summarize(flips.filter((flip) => flip.buy.state === 'verified' && flip.sell.state === 'verified'));
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Whole days between buying and selling; undefined when the sell date wasn't recorded. */
+export function heldDays(flip: Flip): number | undefined {
+  if (flip.sell.source === 'xlsx') return undefined;
+  return Math.max(0, Math.round((Date.parse(flip.sell.at) - Date.parse(flip.buy.at)) / DAY_MS));
+}
+
 function sum(values: number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }

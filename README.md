@@ -16,10 +16,15 @@ Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpack
 Click the Flipbook icon in the toolbar to open it.
 
 1. Log in to csfloat.com in the same browser.
-2. **Data → Sync trades**. This pulls your full trade history through your session.
-3. Optional: import your existing `cs trades.xlsx` to bring in rows bought or sold elsewhere.
+2. Open or refresh a CSFloat tab. Flipbook syncs your full trade history through your session on its own:
+   whenever a CSFloat tab loads, every 30 minutes while one is open, and when you open Flipbook with data older than 10 minutes.
+   **Sync now** in the header forces one.
+3. Optional: import your existing `cs trades.xlsx` (**Import, export & fees**) to bring in rows bought or sold elsewhere.
 4. Check **Needs review** for sales Flipbook couldn't pair on its own.
-5. **Data → Download .xlsx** gives you the Flips sheet back with live formulas.
+5. Keep the book about flips: tick rows (shift-click for a range) and move cases, long holds or gifts into a **folder**.
+   Folders keep their own totals and stay out of the main book and the export.
+6. Filter by item type, period, result and match; sort by any column; switch between **Ledger**, **Compact** and **Sheet** layouts.
+7. **Download .xlsx** gives you the Flips sheet back with live formulas.
 
 ## How matching works
 

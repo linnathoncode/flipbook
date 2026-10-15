@@ -79,12 +79,24 @@ Same formulas as the Flips sheet so exported numbers reconcile with Excel.
 
 ## Dashboard screens
 
-1. **Overview** — total profit, avg %, weighted avg %, open positions value, last sync time.
-2. **Sync / Import** — "Sync from CSFloat" button, drop zone for `trades.json` / `.xlsx`.
-3. **Flips** — closed positions table (buy ↔ sell), confidence badge, unmatch button.
-4. **Open positions** — bought, not sold.
-5. **Review** — unmatched sells and suggested/ambiguous matches; pick a buy manually.
-6. **Export** — download `.xlsx`.
+Full-width layout: a sidebar (book, folders, filters) and the list. The header shows sync status and **Sync now**.
+
+1. **Flips** — closed positions; the headline sentence summarizes settled flips matching the current filters.
+2. **Holding** — bought, not sold, with cost total.
+3. **Needs review** — ambiguous sales (pick the buy) and sales with no buy on record.
+4. **Folders** — user-made places for trades that aren't flips (cases, long holds). Moving a flip moves both trades;
+   a flip follows its sell's folder, else its buy's. Folders are excluded from the main totals and the export.
+5. **Import, export & fees** — `trades.json` / `.xlsx` import, `.xlsx` export, seller fee.
+
+Every list: search, filters (type, period, result, match), sortable columns, three layouts
+(Ledger, Compact, Sheet with gridlines and a totals row), and row selection with shift-click ranges feeding a bulk **Move to** bar.
+Layout and sort are remembered per browser.
+
+## Sync
+
+The background worker syncs through an already-open csfloat.com tab when one finishes loading and on a 30-minute alarm;
+the dashboard asks for a sync on open when the last one is over 10 minutes old (opening a CSFloat tab if needed).
+One sync runs at a time. Failures are stored and shown in the header.
 
 ## Milestones
 

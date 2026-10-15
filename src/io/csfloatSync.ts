@@ -1,6 +1,6 @@
 import type { CsfloatTrade, CsfloatTradesPage } from '../domain/csfloatTrades';
 
-const CSFLOAT_ORIGIN = 'https://csfloat.com';
+export const CSFLOAT_ORIGIN = 'https://csfloat.com';
 const PAGE_SIZE = 100;
 /** Hard stop so a misbehaving API can't loop forever. */
 const MAX_PAGES = 100;
@@ -10,9 +10,19 @@ const MAX_PAGES = 100;
  *
  * The request runs inside a csfloat.com tab, so the browser attaches the
  * session cookie itself — no API key is ever read or stored by the extension.
+ *
+ * Returns undefined when no CSFloat tab is open and opening one isn't allowed,
+ * so background syncs never pop up tabs on their own.
  */
-export async function fetchAllCsfloatTrades(): Promise<CsfloatTrade[]> {
-  const { tabId, openedByUs } = await acquireCsfloatTab();
+export async function fetchAllCsfloatTrades({
+  openTabIfNeeded,
+}: {
+  openTabIfNeeded: boolean;
+}): Promise<CsfloatTrade[] | undefined> {
+  const existingTabId = await findCsfloatTab();
+  if (existingTabId === undefined && !openTabIfNeeded) return undefined;
+  const { tabId, openedByUs } =
+    existingTabId === undefined ? await openCsfloatTab() : { tabId: existingTabId, openedByUs: false };
   try {
     const [injection] = await chrome.scripting.executeScript({
       target: { tabId },
@@ -50,10 +60,13 @@ async function fetchTradePagesInPage(pageSize: number, maxPages: number): Promis
   return { trades };
 }
 
-async function acquireCsfloatTab(): Promise<{ tabId: number; openedByUs: boolean }> {
-  const [existing] = await chrome.tabs.query({ url: `${CSFLOAT_ORIGIN}/*` });
-  if (existing?.id !== undefined) return { tabId: existing.id, openedByUs: false };
+/** A loaded, awake tab can run the fetch; a discarded one can't. */
+async function findCsfloatTab(): Promise<number | undefined> {
+  const tabs = await chrome.tabs.query({ url: `${CSFLOAT_ORIGIN}/*`, status: 'complete', discarded: false });
+  return tabs.find((tab) => tab.id !== undefined)?.id;
+}
 
+async function openCsfloatTab(): Promise<{ tabId: number; openedByUs: boolean }> {
   const created = await chrome.tabs.create({ url: CSFLOAT_ORIGIN, active: false });
   if (created.id === undefined) throw new Error('Could not open a CSFloat tab.');
   await waitForTabLoaded(created.id);

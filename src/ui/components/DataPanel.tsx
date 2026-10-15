@@ -3,14 +3,14 @@ import {
   exportWorkbook,
   importTrackerWorkbook,
   importTradesJson,
-  syncFromCsfloat,
   updateFeeRate,
   type ImportSummary,
 } from '../../app/actions';
-import { errorMessage } from '../useJournal';
+import { errorText } from '../../app/sync';
 
 interface Props {
   feeRate: number;
+  onSync: () => void;
   onChange: () => void;
 }
 
@@ -23,7 +23,7 @@ type Status =
 const PERCENT = 100;
 const EXPORT_FILE_NAME = 'cs trades.xlsx';
 
-export function DataPanel({ feeRate, onChange }: Props) {
+export function DataPanel({ feeRate, onSync, onChange }: Props) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const busy = status.kind === 'busy';
 
@@ -33,14 +33,12 @@ export function DataPanel({ feeRate, onChange }: Props) {
       setStatus({ kind: 'done', text: await task() });
       onChange();
     } catch (cause) {
-      setStatus({ kind: 'error', text: errorMessage(cause) });
+      setStatus({ kind: 'error', text: errorText(cause) });
     }
   };
 
   const describeImport = ({ added, total }: ImportSummary) =>
     added === 0 ? `Up to date. All ${total} trades were already in Flipbook.` : `Added ${added} new trades (${total} read).`;
-
-  const sync = () => run('Syncing with CSFloat…', async () => describeImport(await syncFromCsfloat()));
 
   const onFile = (importer: (file: File) => Promise<ImportSummary>) => (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -63,8 +61,11 @@ export function DataPanel({ feeRate, onChange }: Props) {
 
   return (
     <section className="data">
-      <Row title="Sync with CSFloat" hint="Pulls your full trade history through the CSFloat tab you're logged in to. Flipbook never sees your password or an API key.">
-        <button className="button button-primary" disabled={busy} onClick={sync}>Sync trades</button>
+      <Row
+        title="Sync with CSFloat"
+        hint="Happens on its own whenever a CSFloat tab loads, every 30 minutes while one is open, and when you open Flipbook. It reads your history through the tab you're logged in to; Flipbook never sees your password or an API key."
+      >
+        <button className="button button-primary" disabled={busy} onClick={onSync}>Sync now</button>
       </Row>
 
       <Row title="Import trades.json" hint="For offline use: the file CSFloat returns from its trades page.">

@@ -1,28 +1,52 @@
-import { useCallback, useEffect, useState } from 'react';
-import { loadJournal } from '../app/actions';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadJournal, type Journal } from '../app/actions';
+import { onJournalUpdated, requestSync } from '../app/messages';
+import { errorText, isSyncStale } from '../app/sync';
 
-type Journal = Awaited<ReturnType<typeof loadJournal>>;
+export type SyncState = { kind: 'idle' } | { kind: 'syncing' } | { kind: 'failed'; error: string };
 
+/**
+ * Loads the journal, reloads it when the background worker syncs,
+ * and syncs once on open if the data is stale.
+ */
 export function useJournal() {
   const [journal, setJournal] = useState<Journal>();
   const [error, setError] = useState<string>();
+  const [syncState, setSyncState] = useState<SyncState>({ kind: 'idle' });
+  const syncedOnOpen = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
       setJournal(await loadJournal());
       setError(undefined);
     } catch (cause) {
-      setError(errorMessage(cause));
+      setError(errorText(cause));
     }
   }, []);
 
-  useEffect(() => {
-    void refresh();
+  const sync = useCallback(async () => {
+    setSyncState({ kind: 'syncing' });
+    try {
+      await requestSync(true);
+      setSyncState({ kind: 'idle' });
+    } catch (cause) {
+      setSyncState({ kind: 'failed', error: errorText(cause) });
+    }
+    await refresh();
   }, [refresh]);
 
-  return { journal, error, refresh };
-}
+  useEffect(() => {
+    void refresh();
+    return onJournalUpdated(() => void refresh());
+  }, [refresh]);
 
-export function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+  useEffect(() => {
+    if (syncedOnOpen.current) return;
+    syncedOnOpen.current = true;
+    void isSyncStale().then((stale) => {
+      if (stale) void sync();
+    });
+  }, [sync]);
+
+  return { journal, error, refresh, sync, syncState };
 }
