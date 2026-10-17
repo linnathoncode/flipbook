@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimeAgo } from '../format';
+import type { PricingProgress } from '../../app/sync';
 import type { SyncState } from '../useJournal';
 import type { Theme } from '../useTheme';
 
@@ -14,6 +15,8 @@ export interface SyncProps {
   onRefreshPrices: () => void;
   /** CSFloat asked for a break from price requests until then. */
   pricesPausedUntil?: string;
+  /** Set while held items are being priced. */
+  pricing?: PricingProgress;
   theme: Theme;
   onToggleTheme: () => void;
 }

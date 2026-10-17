@@ -25,7 +25,7 @@ const DEFAULT_SORT: Sort = { key: 'bought', descending: true };
 const FLIPS: MenuTarget = { id: null, name: 'Flips' };
 
 export function App() {
-  const { journal, error, refresh, sync, refreshPrices, syncState } = useJournal();
+  const { journal, error, refresh, sync, refreshPrices, syncState, pricing } = useJournal();
   const [theme, toggleTheme] = useTheme();
   const lastVisit = useLastVisit();
   const [place, setPlace] = useState<Place>({ kind: 'flips' });
@@ -103,6 +103,7 @@ export function App() {
     onSync: sync,
     onRefreshPrices: refreshPrices,
     pricesPausedUntil: journal.settings.pricesPausedUntil,
+    pricing,
     theme,
     onToggleTheme: toggleTheme,
   };

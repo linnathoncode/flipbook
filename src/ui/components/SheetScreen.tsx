@@ -5,6 +5,7 @@ import { ITEM_KINDS, itemKind, KIND_PLURAL } from '../../domain/itemKinds';
 import { clearChips, EMPTY_FILTER, isNarrowed, isUnfiltered, pickResult, toggleExcludedKind, toggleExcludedResult, toggleKind, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
 import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
 import type { Selection } from '../useSelection';
+import { PageTurner } from './PageTurner';
 import { SheetTable, type RowDetail } from './SheetTable';
 import { Kpi } from './shared';
 import { TitleBar, type SyncProps } from './TitleBar';
@@ -165,20 +166,35 @@ function HoldValue({ open, sync }: { open: SheetRow[]; sync: SyncProps }) {
   const oldest = priced.map((row) => row.quote!.fetchedAt).sort()[0];
   const paused = sync.pricesPausedUntil !== undefined && Date.parse(sync.pricesPausedUntil) > Date.now();
   const refreshing = sync.syncState.kind === 'syncing';
-  const status = paused
-    ? 'CSFloat asked for a break; prices resume soon'
-    : priced.length === 0
-      ? 'Not priced yet'
-      : `${priced.length} of ${open.length} priced, ${formatTimeAgo(oldest!)}`;
+  const { pricing } = sync;
+  const status = pricing ? (
+    <span className="pricing">
+      <PageTurner pages={pricing.done} />
+      Pricing {pricing.done} of {pricing.total}
+    </span>
+  ) : paused ? (
+    'CSFloat asked for a break; prices resume soon'
+  ) : priced.length === 0 ? (
+    'Not priced yet'
+  ) : (
+    `${priced.length} of ${open.length} priced, ${formatTimeAgo(oldest!)}`
+  );
   const net = priced.reduce((total, row) => total + row.quote!.net, 0);
 
   return (
     <>
-      <Kpi label="Worth now" value={priced.length ? formatMoney(priced.reduce((total, row) => total + row.quote!.price, 0)) : ''} sub={status} />
-      <Kpi label="If sold now" value={priced.length ? formatSignedMoney(net) : ''} sign={priced.length ? net : undefined} sub={priced.length ? 'after the fee' : undefined} />
+      <div className="hold-value">
+        <Kpi label="Worth now" value={priced.length ? formatMoney(priced.reduce((total, row) => total + row.quote!.price, 0)) : ''} sub={status} />
+        <Kpi label="If sold now" value={priced.length ? formatSignedMoney(net) : ''} sign={priced.length ? net : undefined} sub={priced.length ? 'after the fee' : undefined} />
+        {pricing && (
+          <div className="pricing-line" role="progressbar" aria-label="Pricing held items" aria-valuemin={0} aria-valuemax={pricing.total} aria-valuenow={pricing.done}>
+            <i style={{ width: `${(pricing.done / pricing.total) * 100}%` }} />
+          </div>
+        )}
+      </div>
       <div className="kpi-action">
-        <button className="btn ghost" onClick={sync.onRefreshPrices} disabled={refreshing || paused}>
-          {refreshing ? 'Pricing…' : 'Refresh prices'}
+        <button className="btn ghost" onClick={sync.onRefreshPrices} disabled={refreshing || paused || pricing !== undefined}>
+          {pricing ? 'Pricing…' : refreshing ? 'Syncing…' : 'Refresh prices'}
         </button>
       </div>
     </>

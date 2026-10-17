@@ -1,8 +1,9 @@
-import { errorText, type SyncOptions, type SyncOutcome } from './sync';
+import { errorText, type PricingProgress, type SyncOptions, type SyncOutcome } from './sync';
 
 /** Messages between the dashboard and the background worker, which owns syncing. */
 const SYNC_REQUEST = 'flipbook/sync';
 const JOURNAL_UPDATED = 'flipbook/journal-updated';
+const PRICING = 'flipbook/pricing';
 
 interface SyncRequest extends SyncOptions {
   type: typeof SYNC_REQUEST;
@@ -37,6 +38,21 @@ export function announceJournalUpdated(): void {
 export function onJournalUpdated(listener: () => void): () => void {
   const handler = (message: Message) => {
     if (message.type === JOURNAL_UPDATED) listener();
+  };
+  chrome.runtime.onMessage.addListener(handler);
+  return () => chrome.runtime.onMessage.removeListener(handler);
+}
+
+/** Sent after each price lands, so an open dashboard can fill in the row and turn a page. */
+export function announcePricing(progress: PricingProgress): void {
+  chrome.runtime.sendMessage({ type: PRICING, ...progress }).catch(() => undefined);
+}
+
+export function onPricing(listener: (progress: PricingProgress) => void): () => void {
+  const handler = (message: Message & Partial<PricingProgress>) => {
+    if (message.type === PRICING && message.done !== undefined && message.total !== undefined) {
+      listener({ done: message.done, total: message.total });
+    }
   };
   chrome.runtime.onMessage.addListener(handler);
   return () => chrome.runtime.onMessage.removeListener(handler);

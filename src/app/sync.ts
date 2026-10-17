@@ -3,7 +3,7 @@ import { HOLDS_ID } from '../domain/folders';
 import { listingsInResponse, normalizeCsfloatListings } from '../domain/listings';
 import { duePriceNames, PRICE_KEEP_MS, quoteFromResponse, RATE_LIMIT_PAUSE_MS } from '../domain/prices';
 import { loadJournal } from './actions';
-import { withCsfloatSession, type CsfloatSession } from '../io/csfloatSync';
+import { PRICE_REQUEST_GAP_MS, withCsfloatSession, type CsfloatSession } from '../io/csfloatSync';
 import { loadPrices, loadSettings, loadTrades, replaceListings, savePrices, saveSettings, saveTrades } from '../io/journalStore';
 
 export interface ImportSummary {
@@ -22,13 +22,22 @@ export interface SyncOptions {
   forcePrices?: boolean;
 }
 
-export async function syncFromCsfloat({ openTabIfNeeded, forcePrices = false }: SyncOptions): Promise<SyncOutcome> {
+/** How far a price refresh has got. It's over once `done` reaches `total`. */
+export interface PricingProgress {
+  done: number;
+  total: number;
+}
+
+export async function syncFromCsfloat(
+  { openTabIfNeeded, forcePrices = false }: SyncOptions,
+  onPricing: (progress: PricingProgress) => void = () => undefined,
+): Promise<SyncOutcome> {
   try {
     const summary = await withCsfloatSession({ openTabIfNeeded }, async (session) => {
       const stored = await storeCsfloatTrades(await session.trades());
       await syncListings(session);
       // Prices are a nice-to-have; each one shows its age, so a missed refresh is visible.
-      await refreshHeldPrices(session, forcePrices).catch(() => undefined);
+      await refreshHeldPrices(session, forcePrices, onPricing).catch(() => undefined);
       return stored;
     });
     if (!summary) return { status: 'skipped' };
@@ -77,7 +86,7 @@ async function syncListings(session: CsfloatSession): Promise<void> {
  * Prices what's in Holds, asking CSFloat only about items whose quote has run out.
  * If CSFloat says slow down, whatever came back is kept and prices pause for a while.
  */
-async function refreshHeldPrices(session: CsfloatSession, force: boolean): Promise<void> {
+async function refreshHeldPrices(session: CsfloatSession, force: boolean, onPricing: (progress: PricingProgress) => void): Promise<void> {
   const now = new Date();
   const { pricesPausedUntil } = await loadSettings();
   if (pricesPausedUntil && Date.parse(pricesPausedUntil) > now.getTime()) return;
@@ -87,12 +96,23 @@ async function refreshHeldPrices(session: CsfloatSession, force: boolean): Promi
   const due = duePriceNames(held.map((buy) => buy.item.marketHashName), await loadPrices(), now, force);
   if (due.length === 0) return;
 
-  const { responses, rateLimited } = await session.cheapestListings(due);
-  const fetchedAt = new Date().toISOString();
-  const quotes = Object.entries(responses).map(([name, body]) => quoteFromResponse(name, body, fetchedAt));
-  await savePrices(quotes, new Date(now.getTime() - PRICE_KEEP_MS).toISOString());
-  if (rateLimited) {
-    await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(now.getTime() + RATE_LIMIT_PAUSE_MS).toISOString() });
+  // Each price is saved as it lands, so the sheet fills in row by row instead of all at the end.
+  const keepAfter = new Date(now.getTime() - PRICE_KEEP_MS).toISOString();
+  const total = due.length;
+  onPricing({ done: 0, total });
+  try {
+    for (const [index, name] of due.entries()) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, PRICE_REQUEST_GAP_MS));
+      const answer = await session.cheapestListing(name);
+      if ('rateLimited' in answer) {
+        await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
+        return;
+      }
+      if ('body' in answer) await savePrices([quoteFromResponse(name, answer.body, new Date().toISOString())], keepAfter);
+      onPricing({ done: index + 1, total });
+    }
+  } finally {
+    onPricing({ done: total, total });
   }
 }
 

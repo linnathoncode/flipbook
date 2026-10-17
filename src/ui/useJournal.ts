@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadJournal, type Journal } from '../app/actions';
-import { onJournalUpdated, requestSync } from '../app/messages';
-import { errorText, isSyncStale } from '../app/sync';
+import { onJournalUpdated, onPricing, requestSync } from '../app/messages';
+import { errorText, isSyncStale, type PricingProgress } from '../app/sync';
+
+const PRICING_LINGER_MS = 900;
 
 export type SyncState = { kind: 'idle' } | { kind: 'syncing' } | { kind: 'failed'; error: string };
 
@@ -13,6 +15,8 @@ export function useJournal() {
   const [journal, setJournal] = useState<Journal>();
   const [error, setError] = useState<string>();
   const [syncState, setSyncState] = useState<SyncState>({ kind: 'idle' });
+  /** Set while held items are being priced, whoever started it. */
+  const [pricing, setPricing] = useState<PricingProgress>();
   const syncedOnOpen = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -41,7 +45,21 @@ export function useJournal() {
 
   useEffect(() => {
     void refresh();
-    return onJournalUpdated(() => void refresh());
+    let clearing: ReturnType<typeof setTimeout> | undefined;
+    const stopPricing = onPricing((progress) => {
+      clearTimeout(clearing);
+      setPricing(progress);
+      // Linger on the last page long enough for its turn to land.
+      if (progress.done >= progress.total) clearing = setTimeout(() => setPricing(undefined), PRICING_LINGER_MS);
+      // Each price is already saved; reloading shows it in its row.
+      if (progress.done > 0) void refresh();
+    });
+    const stopUpdates = onJournalUpdated(() => void refresh());
+    return () => {
+      clearTimeout(clearing);
+      stopPricing();
+      stopUpdates();
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -52,5 +70,5 @@ export function useJournal() {
     });
   }, [sync]);
 
-  return { journal, error, refresh, sync, refreshPrices, syncState };
+  return { journal, error, refresh, sync, refreshPrices, syncState, pricing };
 }

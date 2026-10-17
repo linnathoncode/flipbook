@@ -1,4 +1,4 @@
-import { announceJournalUpdated, handleSyncRequests } from '../app/messages';
+import { announceJournalUpdated, announcePricing, handleSyncRequests } from '../app/messages';
 import { isSyncStale, syncFromCsfloat, type SyncOptions, type SyncOutcome } from '../app/sync';
 import { CSFLOAT_ORIGIN } from '../io/csfloatSync';
 
@@ -10,7 +10,7 @@ let runningSync: Promise<SyncOutcome> | undefined;
 
 /** One sync at a time, however many triggers fire together. */
 function sync(options: SyncOptions): Promise<SyncOutcome> {
-  runningSync ??= syncFromCsfloat(options)
+  runningSync ??= syncFromCsfloat(options, announcePricing)
     .then((outcome) => {
       if (outcome.status === 'synced') announceJournalUpdated();
       return outcome;

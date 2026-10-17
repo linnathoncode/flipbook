@@ -4,7 +4,7 @@ export const CSFLOAT_ORIGIN = 'https://csfloat.com';
 const PAGE_SIZE = 100;
 const LISTINGS_PAGE_SIZE = 40;
 /** Spacing between price requests, so a full Holds page looks like someone browsing the market. */
-const PRICE_REQUEST_GAP_MS = 1000;
+export const PRICE_REQUEST_GAP_MS = 1000;
 /** Hard stop so a misbehaving API can't loop forever. */
 const MAX_PAGES = 100;
 
@@ -14,15 +14,12 @@ export interface CsfloatSession {
   trades(): Promise<CsfloatTrade[]>;
   /** What the account has listed right now, as CSFloat sent it. */
   listings(steamId: string): Promise<unknown[]>;
-  /** The cheapest buy-now listing for each name, one request at a time. Stops early if CSFloat says slow down. */
-  cheapestListings(names: string[]): Promise<CheapestListings>;
+  /** The cheapest buy-now listing for one item. Callers space these out; see PRICE_REQUEST_GAP_MS. */
+  cheapestListing(name: string): Promise<CheapestListing>;
 }
 
-export interface CheapestListings {
-  /** Market hash name to CSFloat's raw answer. Names that failed are left out. */
-  responses: Record<string, unknown>;
-  rateLimited: boolean;
-}
+/** CSFloat's raw answer, or that it asked us to slow down, or that this one request failed. */
+export type CheapestListing = { body: unknown } | { rateLimited: true } | { failed: true };
 
 /**
  * Runs `use` with requests that execute inside a csfloat.com tab, so the browser attaches the
@@ -52,7 +49,7 @@ export async function withCsfloatSession<T>(
     return await use({
       trades: () => run(fetchTradePagesInPage, [PAGE_SIZE, MAX_PAGES]),
       listings: (steamId) => run(fetchListingPagesInPage, [steamId, LISTINGS_PAGE_SIZE, MAX_PAGES]),
-      cheapestListings: (names) => run(fetchCheapestListingsInPage, [names, PRICE_REQUEST_GAP_MS]),
+      cheapestListing: (name) => run(fetchCheapestListingInPage, [name]),
     });
   } finally {
     if (openedByUs) await chrome.tabs.remove(tabId);
@@ -104,20 +101,15 @@ async function fetchListingPagesInPage(steamId: string, pageSize: number, maxPag
   return { value: listings };
 }
 
-/** Runs in the csfloat.com page context. One name at a time, spaced out; stops at the first "too many requests". */
-async function fetchCheapestListingsInPage(names: string[], gapMs: number): Promise<PageResult<CheapestListings>> {
-  const responses: Record<string, unknown> = {};
-  for (const [index, name] of names.entries()) {
-    if (index > 0) await new Promise((resolve) => setTimeout(resolve, gapMs));
-    const query = `market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price&type=buy_now&limit=1`;
-    const response = await fetch(`/api/v1/listings?${query}`, { credentials: 'include' });
-    if (response.status === 429) return { value: { responses, rateLimited: true } };
-    if (response.status === 401 || response.status === 403) {
-      return { error: 'Not logged in to CSFloat. Log in at csfloat.com and sync again.' };
-    }
-    if (response.ok) responses[name] = await response.json();
+/** Runs in the csfloat.com page context. One price lookup; the background spaces them out. */
+async function fetchCheapestListingInPage(name: string): Promise<PageResult<CheapestListing>> {
+  const query = `market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price&type=buy_now&limit=1`;
+  const response = await fetch(`/api/v1/listings?${query}`, { credentials: 'include' });
+  if (response.status === 429) return { value: { rateLimited: true } };
+  if (response.status === 401 || response.status === 403) {
+    return { error: 'Not logged in to CSFloat. Log in at csfloat.com and sync again.' };
   }
-  return { value: { responses, rateLimited: false } };
+  return { value: response.ok ? { body: await response.json() } : { failed: true } };
 }
 
 /** A loaded, awake tab can run the fetch; a discarded one can't. */

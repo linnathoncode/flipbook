@@ -839,6 +839,67 @@ thead:hover .chk input {
   margin-left: -20px;
 }
 
+/* Worth now and If sold now, with the pricing progress line under both while prices come in. */
+.hold-value {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 34px;
+}
+
+.pricing-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -9px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.pricing-line i {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 0.4s ease;
+}
+
+.pricing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Taller than a line of text; without this the header jumps when pricing starts and stops. */
+.pricing .book {
+  margin-block: -5px;
+}
+
+/* The pricing book: ink leaves, split by thin gaps in the header colour. */
+.book {
+  flex: none;
+  overflow: visible;
+}
+
+.book .leaf {
+  fill: var(--ink);
+  stroke: var(--bg);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+/* A price that just came in fades into its cell. */
+.est {
+  animation: est-in 0.4s ease;
+}
+
+@keyframes est-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Under today's price in the Now column. */
 .est + .tag.listed {
   display: block;

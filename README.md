@@ -65,6 +65,7 @@ More things you can do:
 - **Worth now** on Holds prices each held item at its cheapest CSFloat listing, and **If sold now** is what that nets
   after the fee. Prices are cached: 6 hours, or 1 hour for items over $100. **Refresh prices** skips anything priced in
   the last 5 minutes, and if CSFloat rate-limits the lookups, Flipbook waits 30 minutes before asking again.
+  While prices come in, a small book turns one page per price and each row fills in as its price lands.
   Sheets with priced items get Now, If sold and % columns you can sort by. The sale columns only show once something
   on the sheet has sold.
 - **Filters** narrows by item type and result (open, listed, wins, losses). Right-click a filter to hide that type or
