@@ -1,5 +1,5 @@
 import { buildJournalView } from '../src/domain/journal';
-import { sectionRows } from '../src/domain/listFilters';
+import { sectionRows, sortRows, totalRows } from '../src/domain/listFilters';
 import { duePriceNames, quoteFromResponse, type PriceQuote } from '../src/domain/prices';
 import { sticker, trade } from './builders';
 
@@ -45,5 +45,25 @@ describe('priced rows', () => {
     expect(row.quote!.price).toBe(20);
     expect(row.quote!.net).toBeCloseTo(9.6);
     expect(row.net).toBeUndefined();
+  });
+});
+
+describe('sorting and totals at today\'s price', () => {
+  it('sorts open buys by what they would make, and totals what they are worth', () => {
+    const cheap = trade('buy', sticker('Sticker | A'), '2026-10-01', 100);
+    const dear = trade('buy', sticker('Sticker | B'), '2026-10-02', 100);
+    const unpriced = trade('buy', sticker('Sticker | C'), '2026-10-03', 100);
+    const view = buildJournalView([cheap, dear, unpriced], [], 0);
+    const prices = new Map([
+      ['Sticker | A', quote('Sticker | A', 50, hoursAgo(1))],
+      ['Sticker | B', quote('Sticker | B', 300, hoursAgo(1))],
+    ]);
+    const rows = sectionRows({ flips: [], openBuys: view.openBuys, sales: [] }, 0, NOW, { prices });
+    const names = sortRows(rows, { key: 'nowNet', descending: true }).map((row) => row.item.marketHashName);
+    expect(names).toEqual(['Sticker | B', 'Sticker | A', 'Sticker | C']);
+    const totals = totalRows(rows);
+    expect(totals.nowPrice).toBeCloseTo(3.5);
+    expect(totals.nowNet).toBeCloseTo(1.5);
+    expect(totals.nowPercent).toBeCloseTo(75);
   });
 });

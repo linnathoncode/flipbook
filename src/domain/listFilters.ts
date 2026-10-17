@@ -224,7 +224,7 @@ function matchesResult(row: SheetRow, result: ResultFilter): boolean {
   return true;
 }
 
-export const SORT_KEYS = ['bought', 'name', 'float', 'adjusted', 'buyPrice', 'sold', 'sellPrice', 'net', 'percent', 'held'] as const;
+export const SORT_KEYS = ['bought', 'name', 'float', 'adjusted', 'buyPrice', 'sold', 'sellPrice', 'net', 'percent', 'held', 'nowPrice', 'nowNet', 'nowPercent'] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 
 export interface Sort {
@@ -246,6 +246,9 @@ const SORT_VALUE: Record<SortKey, SortValue> = {
   net: (row) => row.net,
   percent: (row) => row.percent,
   held: (row) => row.held,
+  nowPrice: (row) => row.quote?.price,
+  nowNet: (row) => row.quote?.net,
+  nowPercent: (row) => row.quote?.percent,
 };
 
 /**
@@ -276,6 +279,10 @@ export interface RowTotals {
   net?: number;
   /** Net profit over what the closed flips cost, like the tracker's "Weighted Avg %". */
   weightedPercent?: number;
+  /** Open buys at today's price: what they're worth, what selling them all would net, and that over what they cost. */
+  nowPrice?: number;
+  nowNet?: number;
+  nowPercent?: number;
 }
 
 /** Blank where nothing in the rows has that figure, so an all-open sheet doesn't show $0.00 sold. */
@@ -287,6 +294,9 @@ export function totalRows(rows: SheetRow[]): RowTotals {
   };
   const closedCost = closed.reduce((sum, row) => sum + (row.buyPrice ?? 0), 0);
   const net = closed.length ? closed.reduce((sum, row) => sum + (row.net ?? 0), 0) : undefined;
+  const priced = rows.filter((row) => row.quote);
+  const pricedCost = priced.reduce((sum, row) => sum + (row.buyPrice ?? 0), 0);
+  const nowNet = priced.length ? priced.reduce((sum, row) => sum + row.quote!.net, 0) : undefined;
   return {
     rows: rows.length,
     closed: closed.length,
@@ -295,5 +305,8 @@ export function totalRows(rows: SheetRow[]): RowTotals {
     fee: total((row) => row.fee),
     net,
     weightedPercent: net !== undefined && closedCost > 0 ? (net / closedCost) * 100 : undefined,
+    nowPrice: total((row) => row.quote?.price),
+    nowNet,
+    nowPercent: nowNet !== undefined && pricedCost > 0 ? (nowNet / pricedCost) * 100 : undefined,
   };
 }

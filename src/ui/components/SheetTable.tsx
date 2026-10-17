@@ -35,7 +35,10 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
   const visible = rows.map(rowEntry);
   const totals = totalRows(allRows);
   const header = { sort, onSort };
-  const columnCount = detailed ? 13 : 12;
+  // Holds are mostly unsold: the sale columns step aside for today's price, and a sheet of flips never shows price columns.
+  const sold = allRows.some((row) => row.status !== 'open');
+  const priced = allRows.some((row) => row.quote || row.listing);
+  const columnCount = 7 + (detailed ? 1 : 0) + (sold ? 5 : 0) + (priced ? 3 : 0);
 
   return (
     <HoverCardProvider>
@@ -48,11 +51,22 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
           <SortHeader label="Float" sortKey="float" numeric {...header} />
           {detailed && <SortHeader label="Adj. float" sortKey="adjusted" numeric title="Where the float sits inside this skin's own range. Trade-ups use this." {...header} />}
           <SortHeader label="Buy" sortKey="buyPrice" numeric {...header} />
-          <SortHeader label="Sold" sortKey="sold" {...header} />
-          <SortHeader label="Sell" sortKey="sellPrice" numeric {...header} />
-          <th className="n">Fee</th>
-          <SortHeader label="Net" sortKey="net" numeric {...header} />
-          <SortHeader label="%" sortKey="percent" numeric {...header} />
+          {priced && (
+            <>
+              <SortHeader label="Now" sortKey="nowPrice" numeric title="The cheapest CSFloat listing for this item" {...header} />
+              <SortHeader label="If sold" sortKey="nowNet" numeric title="What selling at that price would make, after the fee" {...header} />
+              <SortHeader label="%" sortKey="nowPercent" numeric {...header} />
+            </>
+          )}
+          {sold && (
+            <>
+              <SortHeader label="Sold" sortKey="sold" {...header} />
+              <SortHeader label="Sell" sortKey="sellPrice" numeric {...header} />
+              <th className="n">Fee</th>
+              <SortHeader label="Net" sortKey="net" numeric {...header} />
+              <SortHeader label="%" sortKey="percent" numeric {...header} />
+            </>
+          )}
           <SortHeader label="Held" sortKey="held" numeric {...header} />
           <th>Match</th>
         </tr>
@@ -93,13 +107,25 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
               <td className="n m"><FloatCell item={row.item} detailed={detailed} /></td>
               {detailed && <td className="n"><AdjustedFloatCell item={row.item} /></td>}
               <td className="n">{formatMoney(row.buyPrice)}</td>
-              <td className="n m">{formatDate(row.soldAt)}</td>
-              <td className="n">{row.quote ? <Estimate quote={row.quote}>{formatMoney(row.quote.price)}</Estimate> : formatMoney(row.sellPrice)}</td>
-              <td className="n m">{formatMoney(row.fee)}</td>
-              <td className={`n pl ${signClass(row.net)}`}><NetCell row={row} onPickBuy={onPickBuy} /></td>
-              <td className={`n pl ${signClass(row.percent)}`}>
-                {row.quote ? <Estimate quote={row.quote} signed={row.quote.percent}>{formatPercent(row.quote.percent)}</Estimate> : row.percent === undefined ? '' : formatPercent(row.percent)}
-              </td>
+              {priced && (
+                <>
+                  <td className="n">
+                    {row.quote && <Estimate quote={row.quote}>{formatMoney(row.quote.price)}</Estimate>}
+                    {row.listing && <ListedTag listing={row.listing} />}
+                  </td>
+                  <td className="n pl">{row.quote && <Estimate quote={row.quote} signed={row.quote.net}>{formatSignedMoney(row.quote.net)}</Estimate>}</td>
+                  <td className="n pl">{row.quote && <Estimate quote={row.quote} signed={row.quote.percent}>{formatPercent(row.quote.percent)}</Estimate>}</td>
+                </>
+              )}
+              {sold && (
+                <>
+                  <td className="n m">{formatDate(row.soldAt)}</td>
+                  <td className="n">{formatMoney(row.sellPrice)}</td>
+                  <td className="n m">{formatMoney(row.fee)}</td>
+                  <td className={`n pl ${signClass(row.net)}`}><NetCell row={row} listedShown={priced} onPickBuy={onPickBuy} /></td>
+                  <td className={`n pl ${signClass(row.percent)}`}>{row.percent === undefined ? '' : formatPercent(row.percent)}</td>
+                </>
+              )}
               <td className="n m">{formatDays(row.held)}</td>
               <td>{row.match && <MatchLabel confidence={row.match} />}</td>
             </tr>
@@ -111,13 +137,26 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
           <td className="chk" />
           <td colSpan={detailed ? 4 : 3}>{plural(totals.rows, 'row')}</td>
           <td className="n">{formatMoney(totals.buy)}</td>
-          <td />
-          <td className="n">{formatMoney(totals.sell)}</td>
-          <td className="n m">{formatMoney(totals.fee)}</td>
-          <td className={`n pl ${signClass(totals.net)}`}>{totals.net === undefined ? '' : formatSignedMoney(totals.net)}</td>
-          <td className={`n pl ${signClass(totals.weightedPercent)}`} title="Net profit over what the closed flips cost">
-            {totals.weightedPercent === undefined ? '' : formatPercent(totals.weightedPercent)}
-          </td>
+          {priced && (
+            <>
+              <td className="n est">{formatMoney(totals.nowPrice)}</td>
+              <td className={`n pl est ${signClass(totals.nowNet)}`}>{totals.nowNet === undefined ? '' : formatSignedMoney(totals.nowNet)}</td>
+              <td className={`n pl est ${signClass(totals.nowPercent)}`} title="What selling the priced items would make, over what they cost">
+                {totals.nowPercent === undefined ? '' : formatPercent(totals.nowPercent)}
+              </td>
+            </>
+          )}
+          {sold && (
+            <>
+              <td />
+              <td className="n">{formatMoney(totals.sell)}</td>
+              <td className="n m">{formatMoney(totals.fee)}</td>
+              <td className={`n pl ${signClass(totals.net)}`}>{totals.net === undefined ? '' : formatSignedMoney(totals.net)}</td>
+              <td className={`n pl ${signClass(totals.weightedPercent)}`} title="Net profit over what the closed flips cost">
+                {totals.weightedPercent === undefined ? '' : formatPercent(totals.weightedPercent)}
+              </td>
+            </>
+          )}
           <td colSpan={2} />
         </tr>
       </tfoot>
@@ -126,9 +165,8 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
   );
 }
 
-function NetCell({ row, onPickBuy }: { row: SheetRow; onPickBuy: () => void }) {
-  if (row.listing) return <ListedTag listing={row.listing} />;
-  if (row.quote) return <Estimate quote={row.quote} signed={row.quote.net}>{formatSignedMoney(row.quote.net)}</Estimate>;
+function NetCell({ row, listedShown, onPickBuy }: { row: SheetRow; listedShown: boolean; onPickBuy: () => void }) {
+  if (row.listing && !listedShown) return <ListedTag listing={row.listing} />;
   if (row.status === 'open') return <span className="tag open">Open</span>;
   if (row.ambiguous) return <button className="link" onClick={onPickBuy}>Pick buy</button>;
   if (row.status === 'sale') return <span className="tag open">No buy</span>;

@@ -839,6 +839,12 @@ thead:hover .chk input {
   margin-left: -20px;
 }
 
+/* Under today's price in the Now column. */
+.est + .tag.listed {
+  display: block;
+  margin-top: 2px;
+}
+
 .tag.listed {
   margin-left: 0;
   color: var(--ink);

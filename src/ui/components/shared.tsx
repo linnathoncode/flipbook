@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Sort, SortKey } from '../../domain/listFilters';
 import type { Item, MatchConfidence, TradeSource } from '../../domain/types';
+import { roundTo } from '../format';
 
 const WEAR_CODES: Record<string, string> = {
   'Factory New': 'FN',
@@ -25,7 +26,7 @@ export function EmptyState({ children }: { children: ReactNode }) {
 /** CSS class that colors a number by whether it's a gain or a loss. Break-even counts as a gain. */
 export function signClass(value?: number): string {
   if (value === undefined) return '';
-  return value >= 0 ? 'pos' : 'neg';
+  return roundTo(value, 2) >= 0 ? 'pos' : 'neg';
 }
 
 /** Whether a trade happened after `since`, e.g. the last visit. ISO strings compare in time order. */

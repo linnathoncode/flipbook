@@ -13,8 +13,10 @@ const grouped = (dollars: number) =>
 
 /** Blank for a missing value: an empty cell reads better than a dash. */
 export const formatMoney = (dollars?: number) => (dollars === undefined ? '' : `${dollars < 0 ? MINUS : ''}$${grouped(dollars)}`);
-export const formatSignedMoney = (dollars: number) => `${dollars < 0 ? MINUS : '+'}$${grouped(dollars)}`;
-export const formatPercent = (percent: number) => `${percent < 0 ? MINUS : '+'}${Math.abs(percent).toFixed(1)}%`;
+// Rounded before the sign is picked, so a loss of a fraction of a cent reads +$0.00, not −$0.00.
+export const formatSignedMoney = (dollars: number) => `${roundTo(dollars, 2) < 0 ? MINUS : '+'}$${grouped(dollars)}`;
+export const formatPercent = (percent: number) => `${roundTo(percent, 1) < 0 ? MINUS : '+'}${Math.abs(percent).toFixed(1)}%`;
+export const roundTo = (value: number, digits: number) => Math.round(value * 10 ** digits) / 10 ** digits;
 export const formatFloat = (value: number | undefined, digits = 4) => (value === undefined ? '' : value.toFixed(digits));
 export const formatDays = (days?: number) => (days === undefined ? '' : `${days}d`);
 export const plural = (count: number, noun: string, many = `${noun}s`) => `${count} ${count === 1 ? noun : many}`;
