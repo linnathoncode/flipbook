@@ -65,7 +65,7 @@ export function CumulativeChart({ data }: { data: Analytics }) {
 }
 
 export function MonthChart({ data }: { data: Analytics }) {
-  const [width, height, left, right, top, bottom] = [380, 230, 46, 6, 22, 24];
+  const [width, height, left, right, top, bottom] = [380, 240, 46, 6, 22, 36];
   const values = data.byMonth.map((month) => month.net);
   const scale = ticks(Math.min(0, ...values), Math.max(1, ...values), 4);
   const [lo, hi] = [scale[0], scale[scale.length - 1]];
@@ -74,6 +74,10 @@ export function MonthChart({ data }: { data: Analytics }) {
   const barWidth = Math.min(48, band * 0.56);
   // Labels on every bar get crowded past half a year.
   const labelled = data.byMonth.length <= 6;
+  const step = monthStep(band);
+  // The first bar names its year too, unless a January right after it would collide with that label.
+  const firstJanuary = data.byMonth.findIndex((month) => monthOf(month.month) === 0);
+  const firstJanuaryGap = firstJanuary === -1 ? Infinity : firstJanuary;
 
   return (
     <svg className="chart" style={{ maxWidth: width * CHART_STRETCH }} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Net profit by month">
@@ -97,13 +101,29 @@ export function MonthChart({ data }: { data: Analytics }) {
                 {formatSignedMoney(month.net)}
               </text>
             )}
-            <text className="ch-axis" x={center} y={height - 8} textAnchor="middle">{formatMonth(month.month)}</text>
+            {monthOf(month.month) % step === 0 && (
+              <text className="ch-axis" x={center} y={height - bottom + 14} textAnchor="middle">{formatMonth(month.month)}</text>
+            )}
+            {(monthOf(month.month) === 0 || (index === 0 && firstJanuaryGap * band >= MONTH_LABEL_WIDTH)) && (
+              <text className="ch-axis ch-year" x={center} y={height - bottom + 28} textAnchor="middle">{month.month.slice(0, 4)}</text>
+            )}
           </g>
         );
       })}
     </svg>
   );
 }
+
+/** Room a month label needs, in chart units. */
+const MONTH_LABEL_WIDTH = 34;
+
+/** Label every month, or every 2nd, quarter, half or January, whichever is the first that fits. */
+function monthStep(band: number): number {
+  return [1, 2, 3, 6, 12].find((step) => band * step >= MONTH_LABEL_WIDTH) ?? 12;
+}
+
+/** 0 for January through 11 for December, from "2026-03". */
+const monthOf = (month: string) => Number(month.slice(5, 7)) - 1;
 
 export function KindBars({ data }: { data: Analytics }) {
   const largest = Math.max(0.01, ...data.byKind.map((group) => Math.abs(group.net)));

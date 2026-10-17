@@ -1122,6 +1122,10 @@ thead:hover .chk input {
   font-family: var(--font-num);
 }
 
+.ch-year {
+  opacity: 0.7;
+}
+
 .ch-line {
   fill: none;
   stroke: var(--accent);
