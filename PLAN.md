@@ -42,7 +42,8 @@ Permissions: `storage`, `scripting`, `tabs`, host `https://csfloat.com/*`.
   Fields: side, state, priceCents, at (ISO), source, item {marketHashName, itemName, wearName, type,
   defIndex, paintIndex, paintSeed, floatValue, isStatTrak, isSouvenir, iconUrl, inspect}.
 - `Match` — `{sellId, buyId, confidence, method, locked}`. `locked` = user decided; never overwritten by auto-match.
-- `Settings` — `steamId`, `feeRate` (default 0.02), per-source fee overrides.
+- `Settings`: `steamId`, `feeRate` (default 0.02), folder `rules`, `orphansToOther`.
+- `Folder` + `Placement`: user folders and trade id → folder id.
 
 Side is derived from `buyer_id`/`seller_id` vs the user's Steam ID (auto-detected as the ID that appears in every trade).
 
@@ -76,22 +77,45 @@ Same formulas as the Flips sheet so exported numbers reconcile with Excel.
 
 ## Dashboard screens
 
-Sheet-first, like the tracker it replaces. The header shows sync status, **Sync now** and the light/dark toggle;
-spreadsheet tabs along the bottom switch sheets, with **Export .xlsx** and **Settings** at the end.
+A sidebar lists the sheets with their row counts; each sheet's table scrolls in its own container under a header
+with the figures for that sheet, sync status, **Sync now** and the light/dark toggle. **Export .xlsx** and **Settings** sit at the foot.
 
-1. **Flips** (opens first) — closed positions in the tracker's columns, newest buys on top, totals row, big summary figures above.
-   Trades since the last visit carry a **New** tag.
-2. **Holding** — bought, not sold, with cost total and days held.
-3. **Needs review** — ambiguous sales (pick the buy) and sales with no buy on record.
-4. **Folders** — one tab each, for trades that aren't flips (cases, long holds). Moving a flip moves both trades;
-   a flip follows its sell's folder, else its buy's. Folders are excluded from the main totals and the export.
-5. **Settings** — sync explanation and seller fee.
+1. **Flips** (opens first): every buy, newest on top. Open buys and closed flips share one table, so a new buy is
+   always the first row. Trades since the last visit carry a **New** tag.
+2. **Holds** and **Other**: default folders that can't be renamed or deleted. Holds is for long holds, Other for
+   trades that aren't flips. User folders follow. Folders are excluded from the Flips totals and the export.
+3. **Needs review**: ambiguous sales across the whole journal, with the net each candidate buy would give.
+4. **Analytics**: cumulative net, net by month, net by item kind, best and worst five; 30 days, 90 days or all.
+5. **Settings**: sync, seller fee, auto-Other for sales with no buy, folder rules.
 
-Every sheet: search, a **Filters** drawer (type, period, result, match) that stays closed until asked for, sortable columns,
-and spreadsheet selection (click, Ctrl-click, Shift-click, Escape) that swaps the toolbar for **Move to**.
-Sort and theme are remembered per browser.
+Every sheet: search, a **Filters** row (item kind, result) that stays closed until asked for, sortable columns,
+pagination (25/50/100/all), and spreadsheet selection that swaps the toolbar for **Move to**. Rows also move by
+right-click menu or by dragging onto a sidebar folder. Sort, page size, Compact/Detailed and theme are remembered per browser.
 
-Look: Swiss Ledger — black, white and one red (#E2231A light / #FF3B2F dark), Archivo + JetBrains Mono, thick rules, no radii.
+### Where a trade goes
+
+Placement is a map of trade id → folder id, with the sentinel `flips` pinning a trade to the Flips sheet. In order:
+
+1. Where the user put it.
+2. A folder rule (`{kind, folderId, since}`) for buys made on or after `since`. After a move where every row is the
+   same kind, a toast offers the rule. Rules never touch older trades, which is why the same journal works for someone
+   who flips stickers and someone who only buys them to apply.
+3. Sales with no buy candidate go to Other (setting, on by default).
+4. Everything else stays on Flips.
+
+A flip follows its sell's folder, else its buy's.
+
+### Item detail
+
+Kinds come from the weapon def index (pistol, rifle, sniper, SMG, heavy), ★ for knives and gloves, and CSFloat's
+`type` for the rest. Detailed view adds the Steam image, seed, fade %, stickers and charms, and the wear bar.
+Float caps come from a bundled table keyed `defIndex:paintIndex` (built by `npm run float-ranges` from
+ByMykel/CSGO-API, MIT); skins missing from it count as 0 to 1. Adjusted float = (float − min) / (max − min), which is
+what trade-ups use.
+
+Look: warm stone paper (#fbfaf7 light / #171613 dark), ink as the only accent, green and red only for money,
+CS2 rarity colors on items. Schibsted Grotesk + Martian Mono, hairline rules, 7px corners. No uppercase labels,
+pills, icons on menu rows or status dots.
 
 ## Sync
 
