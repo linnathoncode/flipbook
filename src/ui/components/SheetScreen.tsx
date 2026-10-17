@@ -1,8 +1,8 @@
 import { useState, type DragEvent, type FormEvent, type MouseEvent } from 'react';
 import { deleteFolder, renameFolder } from '../../app/actions';
 import { HOLDS_ID, isDefaultFolder, OTHER_ID, type Folder } from '../../domain/folders';
-import { ITEM_KINDS, itemKind, KIND_PLURAL, type ItemKind } from '../../domain/itemKinds';
-import { EMPTY_FILTER, isUnfiltered, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
+import { ITEM_KINDS, itemKind, KIND_PLURAL } from '../../domain/itemKinds';
+import { clearChips, EMPTY_FILTER, isNarrowed, isUnfiltered, pickResult, toggleExcludedKind, toggleExcludedResult, toggleKind, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
 import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
 import type { Selection } from '../useSelection';
 import { SheetTable, type RowDetail } from './SheetTable';
@@ -245,7 +245,8 @@ function FolderTitle({ folder, rowCount, sync, onChange, onDeleted }: FolderTitl
 }
 
 function Toolbar({ view, shown, total }: { view: SheetView; shown: number; total: number }) {
-  const activeFilters = view.filter.kinds.length + (view.filter.result === 'all' ? 0 : 1);
+  const { kinds, result, excludedKinds, excludedResults } = view.filter;
+  const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
   return (
     <div className="toolbar">
       <input
@@ -298,24 +299,39 @@ function SelectionBar({ count, inOther, onMoveMenu, onSendToOther, onClear }: Se
 /** Only the kinds on this sheet get a chip. */
 function Filters({ rows, filter, onChange }: { rows: SheetRow[]; filter: ListFilter; onChange: (filter: ListFilter) => void }) {
   const present = new Set(rows.map((row) => itemKind(row.item)));
-  const kinds = ITEM_KINDS.filter((kind) => present.has(kind) || filter.kinds.includes(kind));
-  const toggle = (kind: ItemKind) =>
-    onChange({ ...filter, kinds: filter.kinds.includes(kind) ? filter.kinds.filter((k) => k !== kind) : [...filter.kinds, kind] });
-  const narrowed = filter.kinds.length > 0 || filter.result !== 'all';
+  const kinds = ITEM_KINDS.filter((kind) => present.has(kind) || filter.kinds.includes(kind) || filter.excludedKinds.includes(kind));
+  const hide = (event: MouseEvent, next: ListFilter) => {
+    event.preventDefault();
+    onChange(next);
+  };
 
   return (
-    <div className="filters" id="filters">
+    <div className="filters" id="filters" title="Right-click a filter to hide it">
       <span className="flabel">Type</span>
       {kinds.map((kind) => (
-        <button key={kind} className="chip" aria-pressed={filter.kinds.includes(kind)} onClick={() => toggle(kind)}>{KIND_PLURAL[kind]}</button>
+        <button
+          key={kind}
+          className={filter.excludedKinds.includes(kind) ? 'chip excluded' : 'chip'}
+          aria-pressed={filter.kinds.includes(kind)}
+          onClick={() => onChange(toggleKind(filter, kind))}
+          onContextMenu={(event) => hide(event, toggleExcludedKind(filter, kind))}
+        >
+          {KIND_PLURAL[kind]}
+        </button>
       ))}
       <span className="flabel">Result</span>
       {RESULTS.map((result) => (
-        <button key={result.value} className="chip" aria-pressed={filter.result === result.value} onClick={() => onChange({ ...filter, result: result.value })}>
+        <button
+          key={result.value}
+          className={filter.excludedResults.includes(result.value) ? 'chip excluded' : 'chip'}
+          aria-pressed={filter.result === result.value}
+          onClick={() => onChange(pickResult(filter, result.value))}
+          onContextMenu={(event) => hide(event, toggleExcludedResult(filter, result.value))}
+        >
           {result.label}
         </button>
       ))}
-      {narrowed && <button className="btn ghost" onClick={() => onChange({ ...filter, kinds: [], result: 'all' })}>Clear filters</button>}
+      {isNarrowed(filter) && <button className="btn ghost" onClick={() => onChange(clearChips(filter))}>Clear filters</button>}
     </div>
   );
 }

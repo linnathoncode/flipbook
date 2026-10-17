@@ -152,12 +152,56 @@ export interface ListFilter {
   /** Empty means every kind. */
   kinds: ItemKind[];
   result: ResultFilter;
+  /** Kinds and results to hide, whatever else is picked. */
+  excludedKinds: ItemKind[];
+  excludedResults: ResultFilter[];
 }
 
-export const EMPTY_FILTER: ListFilter = { query: '', kinds: [], result: 'all' };
+export const EMPTY_FILTER: ListFilter = { query: '', kinds: [], result: 'all', excludedKinds: [], excludedResults: [] };
 
 export function isUnfiltered(filter: ListFilter): boolean {
-  return !filter.query.trim() && filter.kinds.length === 0 && filter.result === 'all';
+  return !filter.query.trim() && !isNarrowed(filter);
+}
+
+/** Any type or result chip in use, ignoring the search box. */
+export function isNarrowed(filter: ListFilter): boolean {
+  return filter.kinds.length > 0 || filter.result !== 'all' || filter.excludedKinds.length > 0 || filter.excludedResults.length > 0;
+}
+
+export function clearChips(filter: ListFilter): ListFilter {
+  return { ...EMPTY_FILTER, query: filter.query };
+}
+
+/** Click picks a kind (or drops it); a kind that was hidden comes back picked. */
+export function toggleKind(filter: ListFilter, kind: ItemKind): ListFilter {
+  const excludedKinds = filter.excludedKinds.filter((k) => k !== kind);
+  const kinds = filter.kinds.includes(kind) ? filter.kinds.filter((k) => k !== kind) : [...filter.kinds, kind];
+  return { ...filter, kinds, excludedKinds };
+}
+
+/** Right-click hides a kind, or shows it again. */
+export function toggleExcludedKind(filter: ListFilter, kind: ItemKind): ListFilter {
+  const hidden = filter.excludedKinds.includes(kind);
+  return {
+    ...filter,
+    kinds: filter.kinds.filter((k) => k !== kind),
+    excludedKinds: hidden ? filter.excludedKinds.filter((k) => k !== kind) : [...filter.excludedKinds, kind],
+  };
+}
+
+export function pickResult(filter: ListFilter, result: ResultFilter): ListFilter {
+  return { ...filter, result, excludedResults: filter.excludedResults.filter((r) => r !== result) };
+}
+
+/** "All" can't be hidden. */
+export function toggleExcludedResult(filter: ListFilter, result: ResultFilter): ListFilter {
+  if (result === 'all') return filter;
+  const hidden = filter.excludedResults.includes(result);
+  return {
+    ...filter,
+    result: filter.result === result ? 'all' : filter.result,
+    excludedResults: hidden ? filter.excludedResults.filter((r) => r !== result) : [...filter.excludedResults, result],
+  };
 }
 
 export function filterRows(rows: SheetRow[], filter: ListFilter): SheetRow[] {
@@ -166,7 +210,9 @@ export function filterRows(rows: SheetRow[], filter: ListFilter): SheetRow[] {
     (row) =>
       (!query || row.item.marketHashName.toLowerCase().includes(query)) &&
       (filter.kinds.length === 0 || filter.kinds.includes(itemKind(row.item))) &&
-      matchesResult(row, filter.result),
+      !filter.excludedKinds.includes(itemKind(row.item)) &&
+      matchesResult(row, filter.result) &&
+      !filter.excludedResults.some((result) => matchesResult(row, result)),
   );
 }
 

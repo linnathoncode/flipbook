@@ -514,6 +514,14 @@ input {
   color: var(--bg);
 }
 
+/* Right-clicked: rows of this kind or result are hidden. */
+.chip.excluded {
+  border-color: var(--neg);
+  color: var(--neg);
+  background: color-mix(in srgb, var(--neg) 10%, var(--bg));
+  text-decoration: line-through;
+}
+
 /* ---------- Sheet ---------- */
 
 /* The table scrolls on its own, so the header and totals above and below stay in view. */

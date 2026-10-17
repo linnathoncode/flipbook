@@ -1,5 +1,5 @@
 import { buildJournalView } from '../src/domain/journal';
-import { EMPTY_FILTER, filterRows, sectionRows, sortRows, totalRows, type SheetRow } from '../src/domain/listFilters';
+import { EMPTY_FILTER, filterRows, pickResult, sectionRows, sortRows, toggleExcludedKind, toggleExcludedResult, toggleKind, totalRows, type SheetRow } from '../src/domain/listFilters';
 import { skin, sticker, trade } from './builders';
 
 const NOW = new Date('2026-10-15T12:00:00Z');
@@ -53,6 +53,22 @@ describe('filterRows', () => {
     expect(keys(filterRows(rows, { ...EMPTY_FILTER, result: 'win' }))).toEqual([win.key]);
     expect(keys(filterRows(rows, { ...EMPTY_FILTER, result: 'loss' }))).toEqual([loss.key]);
     expect(keys(filterRows(rows, { ...EMPTY_FILTER, result: 'open' }))).toEqual([open.key]);
+  });
+
+  it('hides right-clicked kinds and results', () => {
+    const { rows, win, loss, open } = rowsFor();
+    expect(keys(filterRows(rows, toggleExcludedKind(EMPTY_FILTER, 'sticker')))).toEqual([win.key, loss.key]);
+    expect(keys(filterRows(rows, toggleExcludedResult(EMPTY_FILTER, 'open')))).not.toContain(open.key);
+    const noLosses = toggleExcludedResult(pickResult(EMPTY_FILTER, 'loss'), 'loss');
+    expect(noLosses.result).toBe('all');
+    expect(keys(filterRows(rows, noLosses))).not.toContain(loss.key);
+  });
+
+  it('switches a chip between picked and hidden', () => {
+    const hidden = toggleExcludedKind(toggleKind(EMPTY_FILTER, 'sticker'), 'sticker');
+    expect(hidden).toMatchObject({ kinds: [], excludedKinds: ['sticker'] });
+    expect(toggleKind(hidden, 'sticker')).toMatchObject({ kinds: ['sticker'], excludedKinds: [] });
+    expect(toggleExcludedResult(EMPTY_FILTER, 'all')).toBe(EMPTY_FILTER);
   });
 });
 

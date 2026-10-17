@@ -65,7 +65,8 @@ More things you can do:
 - **Worth now** on Holds prices each held item at its cheapest CSFloat listing, and **If sold now** is what that nets
   after the fee. Prices are cached: 6 hours, or 1 hour for items over $100. **Refresh prices** skips anything priced in
   the last 5 minutes, and if CSFloat rate-limits the lookups, Flipbook waits 30 minutes before asking again.
-- **Filters** narrows by item type and result (open, listed, wins, losses). Click a column header to sort.
+- **Filters** narrows by item type and result (open, listed, wins, losses). Right-click a filter to hide that type or
+  result instead; it turns red. Click a column header to sort. Each sheet remembers its own sort.
 - **Rows per page** sets the page size (25, 50, 100 or all).
 - **Needs review** lists sales that could have come from more than one buy. Pick the right one and it's paired for good.
 - **Analytics** charts your net profit over time, by month and by item type, with your best and worst flips.
