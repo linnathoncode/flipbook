@@ -31,7 +31,9 @@ export function App() {
   const [place, setPlace] = useState<Place>({ kind: 'flips' });
   const [filter, setFilterState] = useState<ListFilter>(EMPTY_FILTER);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [storedSort, setStoredSort] = usePreference<Sort>('sheet-sort', DEFAULT_SORT);
+  // The sort every sheet used before each kept its own; still the starting point for sheets never sorted.
+  const [legacySort] = usePreference<Sort>('sheet-sort', DEFAULT_SORT);
+  const [sorts, setSorts] = usePreference<Record<string, Sort>>('sheet-sorts', {});
   const [detail, setDetail] = usePreference<RowDetail>('row-detail', 'compact');
   const [storedPageSize, setStoredPageSize] = usePreference<PageSize>('page-size', 25);
   const [page, setPage] = useState(0);
@@ -39,14 +41,16 @@ export function App() {
   const selection = useSelection();
   const { toast, show, dismiss } = useToast();
 
-  // Preferences saved by an older version may name columns that no longer exist.
-  const sort = SORT_KEYS.includes(storedSort.key) ? storedSort : DEFAULT_SORT;
   const pageSize = PAGE_SIZES.includes(storedPageSize) ? storedPageSize : 25;
 
   // A folder deleted elsewhere (or just now) falls back to Flips.
   const folder = place.kind === 'folder' ? journal?.folders.find((candidate) => candidate.id === place.folderId) : undefined;
   const current: Place = place.kind === 'folder' && journal && !folder ? { kind: 'flips' } : place;
   const section = journal && sectionAt(journal, current);
+  const sheetKey = current.kind === 'folder' ? current.folderId : current.kind;
+  // Preferences saved by an older version may name columns that no longer exist.
+  const storedSort = sorts[sheetKey] ?? legacySort;
+  const sort = SORT_KEYS.includes(storedSort.key) ? storedSort : DEFAULT_SORT;
   const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date(), { listed: journal.listed, prices: journal.prices }) : [];
   const shown = sortRows(filterRows(rows, filter), sort);
 
@@ -78,7 +82,7 @@ export function App() {
     toggleFilters: () => setFiltersOpen(!filtersOpen),
     sort,
     setSort: (next) => {
-      setStoredSort(next);
+      setSorts({ ...sorts, [sheetKey]: next });
       setPage(0);
     },
     detail,
