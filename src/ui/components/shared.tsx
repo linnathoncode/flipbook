@@ -1,124 +1,103 @@
-import { useEffect, useRef, type MouseEvent } from 'react';
-import { trackerDisplayName } from '../../domain/itemNames';
-import type { Sort } from '../../domain/listFilters';
-import type { Trade } from '../../domain/types';
-import { rarityColor } from '../rarity';
-import type { Entry, Selection } from '../useSelection';
+import type { ReactNode } from 'react';
+import type { Sort, SortKey } from '../../domain/listFilters';
+import type { Item, MatchConfidence, TradeSource } from '../../domain/types';
 
-export function EmptyState({ text }: { text: string }) {
-  return <p className="empty">{text}</p>;
+const WEAR_CODES: Record<string, string> = {
+  'Factory New': 'FN',
+  'Minimal Wear': 'MW',
+  'Field-Tested': 'FT',
+  'Well-Worn': 'WW',
+  'Battle-Scarred': 'BS',
+};
+
+export const CONFIDENCE: Record<MatchConfidence, { label: string; hint: string }> = {
+  exact: { label: 'Exact', hint: 'Same float, seed and pattern' },
+  fifo: { label: 'FIFO', hint: 'Interchangeable item, oldest buy closed first' },
+  suggested: { label: 'Check', hint: 'Paired by name only. One earlier buy matched, so check it.' },
+  tracker: { label: 'Tracker', hint: 'Paired on a row of your spreadsheet' },
+  manual: { label: 'Manual', hint: 'You chose this pairing' },
+};
+
+export function EmptyState({ children }: { children: ReactNode }) {
+  return <p className="empty">{children}</p>;
 }
 
-/** CSS class that colors a number by whether it's a gain or a loss. */
-export function signClass(value: number): string {
-  if (value > 0) return 'gain';
-  if (value < 0) return 'loss';
-  return '';
+/** CSS class that colors a number by whether it's a gain or a loss. Break-even counts as a gain. */
+export function signClass(value?: number): string {
+  if (value === undefined) return '';
+  return value >= 0 ? 'pos' : 'neg';
 }
 
 /** Whether a trade happened after `since`, e.g. the last visit. ISO strings compare in time order. */
-export function isAfter(iso: string, since?: string): boolean {
-  return since !== undefined && iso > since;
+export function isAfter(iso: string | undefined, since?: string): boolean {
+  return iso !== undefined && since !== undefined && iso > since;
 }
 
-/** Rows typed into a spreadsheet keep the name the user wrote; synced rows use the tracker's naming. */
-export function itemLabel(trade: Trade): string {
-  return trade.source === 'xlsx' ? trade.item.itemName : trackerDisplayName(trade.item);
+export interface ItemTitle {
+  name: string;
+  /** Wear code for skins, the event for stickers. */
+  detail?: string;
+  /** Full wear name for skins, event or type otherwise. */
+  longDetail?: string;
 }
 
-/** The name cell: CS2 rarity stripe, name, and NEW / PENDING tags. */
-export function ItemName({ trade, isNew = false }: { trade: Trade; isNew?: boolean }) {
-  return (
-    <span className="item-name">
-      <span className="rarity" style={{ background: rarityColor(trade.item) ?? 'transparent' }} aria-hidden="true" />
-      {itemLabel(trade)}
-      {isNew && <span className="tag tag-new">New</span>}
-      {trade.state === 'pending' && <span className="tag tag-pending">Pending</span>}
-    </span>
-  );
+/** Rows typed into a spreadsheet keep the name the user wrote. */
+export function itemTitle(item: Item, source: TradeSource = 'csfloat'): ItemTitle {
+  if (source === 'xlsx') return { name: item.itemName };
+  const prefix = item.isStatTrak ? 'StatTrak™ ' : item.isSouvenir ? 'Souvenir ' : '';
+  if (item.wearName) {
+    return { name: prefix + item.itemName, detail: WEAR_CODES[item.wearName] ?? item.wearName, longDetail: item.wearName };
+  }
+  const split = item.itemName.lastIndexOf(' | ');
+  if ((item.type === 'sticker' || item.type === 'patch') && split > 0) {
+    const event = item.itemName.slice(split + 3);
+    return { name: item.itemName.slice(0, split), detail: event, longDetail: event };
+  }
+  return { name: prefix + item.itemName, longDetail: typeLabel(item.type) };
 }
 
-interface SortHeaderProps<Key extends string> {
+function typeLabel(type: string): string | undefined {
+  if (type === 'unknown') return undefined;
+  const words = type.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+interface SortHeaderProps {
   label: string;
-  sortKey: Key;
-  sort: Sort<Key>;
-  onSort: (sort: Sort<Key>) => void;
-  className?: string;
+  sortKey: SortKey;
+  sort: Sort;
+  onSort: (sort: Sort) => void;
+  numeric?: boolean;
+  title?: string;
 }
 
-/** Click to sort by this column; click again to flip the direction. New columns start highest/newest first. */
-export function SortHeader<Key extends string>({ label, sortKey, sort, onSort, className = '' }: SortHeaderProps<Key>) {
+/** Click to sort by this column; click again to flip it. Names start A to Z, everything else highest first. */
+export function SortHeader({ label, sortKey, sort, onSort, numeric = false, title }: SortHeaderProps) {
   const active = sort.key === sortKey;
-  const ariaSort = active ? (sort.descending ? 'descending' : 'ascending') : undefined;
   return (
-    <th className={className} aria-sort={ariaSort}>
-      <button
-        className={`sort-button ${active ? 'is-active' : ''}`}
-        onClick={() => onSort({ key: sortKey, descending: active ? !sort.descending : true })}
-      >
+    <th className={numeric ? 'n' : undefined} aria-sort={active ? (sort.descending ? 'descending' : 'ascending') : undefined} title={title}>
+      <button onClick={() => onSort({ key: sortKey, descending: active ? !sort.descending : sortKey !== 'name' })}>
         {label}
-        <span className="sort-arrow" aria-hidden="true">{active ? (sort.descending ? '↓' : '↑') : ''}</span>
+        {active && (sort.descending ? ' ↓' : ' ↑')}
       </button>
     </th>
   );
 }
 
-/**
- * Spreadsheet selection on a whole row: click selects it, Ctrl/Cmd-click adds it, Shift-click selects a range.
- * Clicks on the row's own buttons and links are left alone.
- */
-export function selectableRow(entry: Entry, visible: Entry[], selection: Selection) {
-  const selected = selection.has(entry.key);
-  return {
-    className: `row ${selected ? 'is-selected' : ''}`,
-    'aria-selected': selected,
-    // Shift-click would otherwise also select the text between the two rows.
-    onMouseDown: (event: MouseEvent) => event.shiftKey && event.preventDefault(),
-    onClick: (event: MouseEvent) => {
-      if ((event.target as HTMLElement).closest('button, a, input')) return;
-      selection.click(entry, { add: event.ctrlKey || event.metaKey, range: event.shiftKey }, visible);
-    },
-  };
-}
-
-interface RowCheckProps {
-  entry: Entry;
-  visible: Entry[];
-  selection: Selection;
+interface KpiProps {
   label: string;
+  value: ReactNode;
+  /** Colors the figure as a gain or loss. */
+  sign?: number;
+  sub?: ReactNode;
 }
 
-/** The keyboard way in: a checkbox adds or removes its row, Shift extends a range. */
-export function RowCheck({ entry, visible, selection, label }: RowCheckProps) {
-  // Click (not change) carries the shift key needed for range selection.
-  const onClick = (event: MouseEvent<HTMLInputElement>) => selection.click(entry, { add: true, range: event.shiftKey }, visible);
+export function Kpi({ label, value, sign, sub }: KpiProps) {
   return (
-    <input
-      type="checkbox"
-      className="row-check"
-      checked={selection.has(entry.key)}
-      onClick={onClick}
-      onChange={() => undefined}
-      aria-label={`Select ${label}`}
-    />
-  );
-}
-
-export function SelectAllCheck({ visible, selection }: { visible: Entry[]; selection: Selection }) {
-  const selectedCount = visible.filter((entry) => selection.has(entry.key)).length;
-  const all = visible.length > 0 && selectedCount === visible.length;
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = selectedCount > 0 && !all;
-  }, [selectedCount, all]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      className="row-check"
-      checked={all}
-      onChange={() => selection.setAll(visible, !all)}
-      aria-label="Select all shown"
-    />
+    <div className="kpi">
+      <span className="l">{label}</span>
+      <span className={`v ${signClass(sign)}`}>{value}</span>
+      {sub && <span className="s">{sub}</span>}
+    </div>
   );
 }

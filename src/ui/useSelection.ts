@@ -15,9 +15,10 @@ export interface Modifiers {
 export interface Selection {
   count: number;
   has: (key: string) => boolean;
-  /** `visible` is the rows on screen, in order, so a range covers what the user sees. */
+  /** `visible` is the rows on this page, in order, so a range covers what the user sees. */
   click: (entry: Entry, modifiers: Modifiers, visible: Entry[]) => void;
   setAll: (entries: Entry[], selected: boolean) => void;
+  keys: () => string[];
   tradeIds: () => string[];
   clear: () => void;
 }
@@ -69,6 +70,7 @@ export function useSelection(): Selection {
     has: (key) => selected.has(key),
     click,
     setAll,
+    keys: () => [...selected.keys()],
     tradeIds: () => [...selected.values()].flat(),
     clear,
   };

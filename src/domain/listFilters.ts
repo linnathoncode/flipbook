@@ -1,109 +1,165 @@
-import { heldDays, type Flip } from './profit';
+import { adjustedFloat } from './floatRanges';
+import type { Section } from './folders';
+import { itemKind, type ItemKind } from './itemKinds';
+import type { UnmatchedEntry } from './journal';
+import { centsToDollars, heldDays, type Flip } from './profit';
 import type { Item, MatchConfidence, Trade } from './types';
 
-export const ITEM_KINDS = ['skin', 'sticker', 'case', 'agent', 'other'] as const;
-export type ItemKind = (typeof ITEM_KINDS)[number];
+/**
+ * One line of a sheet: a closed flip, a buy not sold yet, or a sale with no paired buy.
+ * Figures are worked out once so filtering, sorting and totals agree.
+ */
+export interface SheetRow {
+  key: string;
+  status: 'closed' | 'open' | 'sale';
+  item: Item;
+  /** What moves when the row moves: both halves of a flip. */
+  tradeIds: string[];
+  buy?: Trade;
+  sell?: Trade;
+  flip?: Flip;
+  /** Set on sales that more than one buy could be. */
+  ambiguous: boolean;
+  match?: MatchConfidence;
+  boughtAt?: string;
+  /** Rows typed into a spreadsheet have no sale date. */
+  soldAt?: string;
+  buyPrice?: number;
+  sellPrice?: number;
+  fee?: number;
+  net?: number;
+  percent?: number;
+  held?: number;
+}
 
-export const PERIODS = ['7d', '30d', '90d', '1y', 'all'] as const;
-export type Period = (typeof PERIODS)[number];
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type ResultFilter = 'all' | 'profit' | 'loss';
+export function sectionRows(section: Section, feeRate: number, now: Date): SheetRow[] {
+  return [
+    ...section.openBuys.map((buy) => openRow(buy, now)),
+    ...section.flips.map(flipRow),
+    ...section.sales.map((entry) => saleRow(entry, feeRate)),
+  ];
+}
+
+function flipRow(flip: Flip): SheetRow {
+  return {
+    key: `flip:${flip.sell.id}`,
+    status: 'closed',
+    // The sell carries the item as it left, stickers and all.
+    item: { ...flip.sell.item, floatValue: flip.sell.item.floatValue ?? flip.buy.item.floatValue },
+    tradeIds: [flip.sell.id, flip.buy.id],
+    buy: flip.buy,
+    sell: flip.sell,
+    flip,
+    ambiguous: false,
+    match: flip.match.confidence,
+    boughtAt: flip.buy.at,
+    soldAt: flip.sell.source === 'xlsx' ? undefined : flip.sell.at,
+    buyPrice: flip.buyPrice,
+    sellPrice: flip.sellPrice,
+    fee: flip.fee,
+    net: flip.netProfit,
+    percent: flip.profitPercent,
+    held: heldDays(flip),
+  };
+}
+
+function openRow(buy: Trade, now: Date): SheetRow {
+  return {
+    key: `open:${buy.id}`,
+    status: 'open',
+    item: buy.item,
+    tradeIds: [buy.id],
+    buy,
+    ambiguous: false,
+    boughtAt: buy.at,
+    buyPrice: centsToDollars(buy.priceCents),
+    held: Math.max(0, Math.floor((now.getTime() - Date.parse(buy.at)) / DAY_MS)),
+  };
+}
+
+function saleRow(entry: UnmatchedEntry, feeRate: number): SheetRow {
+  const sellPrice = centsToDollars(entry.sell.priceCents);
+  return {
+    key: `sale:${entry.sell.id}`,
+    status: 'sale',
+    item: entry.sell.item,
+    tradeIds: [entry.sell.id],
+    sell: entry.sell,
+    ambiguous: entry.reason === 'ambiguous',
+    soldAt: entry.sell.at,
+    sellPrice,
+    fee: sellPrice * (entry.sell.feeRate ?? feeRate),
+  };
+}
+
+export type ResultFilter = 'all' | 'open' | 'win' | 'loss';
 
 export interface ListFilter {
   query: string;
   /** Empty means every kind. */
   kinds: ItemKind[];
   result: ResultFilter;
-  period: Period;
-  /** Empty means every match type. */
-  matches: MatchConfidence[];
 }
 
-export const EMPTY_FILTER: ListFilter = { query: '', kinds: [], result: 'all', period: 'all', matches: [] };
+export const EMPTY_FILTER: ListFilter = { query: '', kinds: [], result: 'all' };
 
 export function isUnfiltered(filter: ListFilter): boolean {
-  return (
-    !filter.query.trim() &&
-    filter.kinds.length === 0 &&
-    filter.result === 'all' &&
-    filter.period === 'all' &&
-    filter.matches.length === 0
+  return !filter.query.trim() && filter.kinds.length === 0 && filter.result === 'all';
+}
+
+export function filterRows(rows: SheetRow[], filter: ListFilter): SheetRow[] {
+  const query = filter.query.trim().toLowerCase();
+  return rows.filter(
+    (row) =>
+      (!query || row.item.marketHashName.toLowerCase().includes(query)) &&
+      (filter.kinds.length === 0 || filter.kinds.includes(itemKind(row.item))) &&
+      matchesResult(row, filter.result),
   );
 }
 
-export const FLIP_SORT_KEYS = ['sold', 'bought', 'name', 'buyPrice', 'sellPrice', 'net', 'percent', 'held'] as const;
-export type FlipSortKey = (typeof FLIP_SORT_KEYS)[number];
-export const HOLDING_SORT_KEYS = ['bought', 'name', 'buyPrice'] as const;
-export type HoldingSortKey = (typeof HOLDING_SORT_KEYS)[number];
+function matchesResult(row: SheetRow, result: ResultFilter): boolean {
+  if (result === 'open') return row.status === 'open';
+  if (result === 'win') return row.net !== undefined && row.net >= 0;
+  if (result === 'loss') return row.net !== undefined && row.net < 0;
+  return true;
+}
 
-export interface Sort<Key extends string> {
-  key: Key;
+export const SORT_KEYS = ['bought', 'name', 'float', 'adjusted', 'buyPrice', 'sold', 'sellPrice', 'net', 'percent', 'held'] as const;
+export type SortKey = (typeof SORT_KEYS)[number];
+
+export interface Sort {
+  key: SortKey;
   descending: boolean;
 }
 
-const KIND_BY_TYPE: Record<string, ItemKind> = {
-  skin: 'skin',
-  sticker: 'sticker',
-  patch: 'sticker',
-  container: 'case',
-  agent: 'agent',
+type SortValue = (row: SheetRow) => string | number | undefined;
+
+const SORT_VALUE: Record<SortKey, SortValue> = {
+  // A sale with no buy sorts by when it sold, so it lands near the trades around it.
+  bought: (row) => row.boughtAt ?? row.soldAt,
+  name: (row) => row.item.marketHashName.replace(/^★\s*/, '').toLowerCase(),
+  float: (row) => row.item.floatValue,
+  adjusted: (row) => adjustedFloat(row.item),
+  buyPrice: (row) => row.buyPrice,
+  sold: (row) => row.soldAt,
+  sellPrice: (row) => row.sellPrice,
+  net: (row) => row.net,
+  percent: (row) => row.percent,
+  held: (row) => row.held,
 };
 
-const PERIOD_DAYS: Record<Period, number> = { '7d': 7, '30d': 30, '90d': 90, '1y': 365, all: Infinity };
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-export function itemKind(item: Item): ItemKind {
-  return KIND_BY_TYPE[item.type] ?? 'other';
-}
-
-export function filterFlips(flips: Flip[], filter: ListFilter, now: Date): Flip[] {
-  return flips.filter(
-    (flip) =>
-      matchesItem(flip.buy.item, filter) &&
-      isWithin(flip.sell.at, filter.period, now) &&
-      matchesResult(flip.netProfit, filter.result) &&
-      (filter.matches.length === 0 || filter.matches.includes(flip.match.confidence)),
-  );
-}
-
-/** Holdings have no result or match, so only the item and period filters apply. */
-export function filterHoldings(buys: Trade[], filter: ListFilter, now: Date): Trade[] {
-  return buys.filter((buy) => matchesItem(buy.item, filter) && isWithin(buy.at, filter.period, now));
-}
-
-export function sortFlips(flips: Flip[], sort: Sort<FlipSortKey>): Flip[] {
-  const value = FLIP_SORT_VALUE[sort.key];
-  return sortBy(flips, value, sort.descending);
-}
-
-export function sortHoldings(buys: Trade[], sort: Sort<HoldingSortKey>): Trade[] {
-  const value = HOLDING_SORT_VALUE[sort.key];
-  return sortBy(buys, value, sort.descending);
-}
-
-type SortValue<T> = (entry: T) => string | number | undefined;
-
-const FLIP_SORT_VALUE: Record<FlipSortKey, SortValue<Flip>> = {
-  sold: (flip) => flip.sell.at,
-  bought: (flip) => flip.buy.at,
-  name: (flip) => flip.buy.item.marketHashName.toLowerCase(),
-  buyPrice: (flip) => flip.buyPrice,
-  sellPrice: (flip) => flip.sellPrice,
-  net: (flip) => flip.netProfit,
-  percent: (flip) => flip.profitPercent,
-  held: heldDays,
-};
-
-const HOLDING_SORT_VALUE: Record<HoldingSortKey, SortValue<Trade>> = {
-  bought: (buy) => buy.at,
-  name: (buy) => buy.item.marketHashName.toLowerCase(),
-  buyPrice: (buy) => buy.priceCents,
-};
-
-/** Entries with no value (e.g. unknown hold time) always sink to the bottom. */
-function sortBy<T>(entries: T[], value: SortValue<T>, descending: boolean): T[] {
-  const direction = descending ? -1 : 1;
-  return [...entries].sort((a, b) => {
+/**
+ * Rows with no value for the column (an open buy's net, a sticker's float) always sink to the bottom.
+ * Sorted by buy date, everything still unsold comes first, so what you're holding never hides under older flips.
+ */
+export function sortRows(rows: SheetRow[], sort: Sort): SheetRow[] {
+  const value = SORT_VALUE[sort.key];
+  const direction = sort.descending ? -1 : 1;
+  const openFirst = sort.key === 'bought';
+  return [...rows].sort((a, b) => {
+    if (openFirst && (a.status === 'open') !== (b.status === 'open')) return a.status === 'open' ? -1 : 1;
     const left = value(a);
     const right = value(b);
     if (left === undefined || right === undefined) return left === right ? 0 : left === undefined ? 1 : -1;
@@ -113,19 +169,33 @@ function sortBy<T>(entries: T[], value: SortValue<T>, descending: boolean): T[] 
   });
 }
 
-function matchesItem(item: Item, filter: ListFilter): boolean {
-  const query = filter.query.trim().toLowerCase();
-  const nameMatches = !query || item.marketHashName.toLowerCase().includes(query);
-  const kindMatches = filter.kinds.length === 0 || filter.kinds.includes(itemKind(item));
-  return nameMatches && kindMatches;
+export interface RowTotals {
+  rows: number;
+  closed: number;
+  buy?: number;
+  sell?: number;
+  fee?: number;
+  net?: number;
+  /** Net profit over what the closed flips cost, like the tracker's "Weighted Avg %". */
+  weightedPercent?: number;
 }
 
-function matchesResult(netProfit: number, result: ResultFilter): boolean {
-  if (result === 'profit') return netProfit > 0;
-  if (result === 'loss') return netProfit < 0;
-  return true;
-}
-
-function isWithin(iso: string, period: Period, now: Date): boolean {
-  return now.getTime() - Date.parse(iso) <= PERIOD_DAYS[period] * DAY_MS;
+/** Blank where nothing in the rows has that figure, so an all-open sheet doesn't show $0.00 sold. */
+export function totalRows(rows: SheetRow[]): RowTotals {
+  const closed = rows.filter((row) => row.status === 'closed');
+  const total = (pick: (row: SheetRow) => number | undefined) => {
+    const values = rows.map(pick).filter((value): value is number => value !== undefined);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) : undefined;
+  };
+  const closedCost = closed.reduce((sum, row) => sum + (row.buyPrice ?? 0), 0);
+  const net = closed.length ? closed.reduce((sum, row) => sum + (row.net ?? 0), 0) : undefined;
+  return {
+    rows: rows.length,
+    closed: closed.length,
+    buy: total((row) => row.buyPrice),
+    sell: total((row) => row.sellPrice),
+    fee: total((row) => row.fee),
+    net,
+    weightedPercent: net !== undefined && closedCost > 0 ? (net / closedCost) * 100 : undefined,
+  };
 }

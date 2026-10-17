@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Folder } from '../domain/folders';
+import type { Folder, FolderRule } from '../domain/folders';
 import type { Match, Trade } from '../domain/types';
 import { DEFAULT_FEE_RATE } from '../domain/profit';
 
@@ -9,9 +9,11 @@ export interface Settings {
   lastSyncAt?: string;
   /** Why the most recent sync failed; cleared by the next success. */
   lastSyncError?: string;
+  rules: FolderRule[];
+  orphansToOther: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = { feeRate: DEFAULT_FEE_RATE };
+const DEFAULT_SETTINGS: Settings = { feeRate: DEFAULT_FEE_RATE, rules: [], orphansToOther: true };
 const SETTINGS_KEY = 'settings';
 
 interface JournalSchema extends DBSchema {
@@ -88,7 +90,7 @@ export async function saveFolder(folder: Folder): Promise<void> {
   await (await db()).put('folders', folder);
 }
 
-/** Deleting a folder sends its trades back to the main book. */
+/** Deleting a folder forgets where its trades were put, so they go back to where Flipbook would file them. */
 export async function deleteFolder(folderId: string): Promise<void> {
   const tx = (await db()).transaction(['folders', 'placements'], 'readwrite');
   const placements = tx.objectStore('placements');
@@ -105,11 +107,7 @@ export async function loadPlacements(): Promise<Map<string, string>> {
   return new Map(all.map((placement) => [placement.tradeId, placement.folderId]));
 }
 
-/** A null folder puts the trades back in the main book. */
-export async function placeTrades(tradeIds: string[], folderId: string | null): Promise<void> {
+export async function placeTrades(tradeIds: string[], folderId: string): Promise<void> {
   const tx = (await db()).transaction('placements', 'readwrite');
-  const writes = tradeIds.map((tradeId) =>
-    folderId === null ? tx.store.delete(tradeId) : tx.store.put({ tradeId, folderId }),
-  );
-  await Promise.all([...writes, tx.done]);
+  await Promise.all([...tradeIds.map((tradeId) => tx.store.put({ tradeId, folderId })), tx.done]);
 }

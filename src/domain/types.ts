@@ -25,6 +25,26 @@ export interface Item {
   isSouvenir: boolean;
   iconUrl?: string;
   inspectLink?: string;
+  stickers?: AppliedSticker[];
+  charms?: Charm[];
+  /** How much of the fade shows, for Fade finishes. */
+  fadePercent?: number;
+}
+
+/** A sticker or patch on an item. */
+export interface AppliedSticker {
+  name: string;
+  slot: number;
+  iconUrl?: string;
+  /** How scraped it is; 0 or missing means untouched. */
+  wear?: number;
+}
+
+/** A charm (keychain) hung on a weapon. */
+export interface Charm {
+  name: string;
+  pattern?: number;
+  iconUrl?: string;
 }
 
 export interface Trade {

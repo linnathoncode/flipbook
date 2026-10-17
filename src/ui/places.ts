@@ -1,9 +1,9 @@
-/** Which sheet tab is open. */
+/** Which page the sidebar has open. */
 export type Place =
   | { kind: 'flips' }
-  | { kind: 'holding' }
-  | { kind: 'review' }
   | { kind: 'folder'; folderId: string }
+  | { kind: 'review' }
+  | { kind: 'analytics' }
   | { kind: 'settings' };
 
 export function isSamePlace(a: Place, b: Place): boolean {
@@ -11,9 +11,7 @@ export function isSamePlace(a: Place, b: Place): boolean {
   return a.kind === b.kind;
 }
 
-/** Row keys that stay distinct across flips, held items and unpaired sales on one screen. */
-export const entryKey = {
-  flip: (sellId: string) => `flip:${sellId}`,
-  holding: (buyId: string) => `holding:${buyId}`,
-  sale: (sellId: string) => `sale:${sellId}`,
-};
+/** Flips and folders are sheets of rows; the rest are pages. */
+export function isSheet(place: Place): place is { kind: 'flips' } | { kind: 'folder'; folderId: string } {
+  return place.kind === 'flips' || place.kind === 'folder';
+}

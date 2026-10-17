@@ -1,4 +1,4 @@
-import { UNKNOWN_TYPE, type Item, type Trade, type TradeState } from './types';
+import { UNKNOWN_TYPE, type AppliedSticker, type Charm, type Item, type Trade, type TradeState } from './types';
 
 /** Shape of the subset of CSFloat's `/me/trades` response that we read. */
 export interface CsfloatTrade {
@@ -28,6 +28,9 @@ interface CsfloatItem {
   icon_url?: string;
   serialized_inspect?: string;
   inspect_link?: string;
+  stickers?: { name?: string; slot?: number; icon_url?: string; wear?: number }[];
+  keychains?: { name?: string; pattern?: number; icon_url?: string }[];
+  fade?: { percentage?: number };
 }
 
 export interface CsfloatTradesPage {
@@ -81,5 +84,12 @@ function normalizeItem(raw: CsfloatItem): Item {
     isSouvenir: raw.is_souvenir ?? false,
     iconUrl: raw.icon_url,
     inspectLink: raw.serialized_inspect ?? raw.inspect_link,
+    stickers: raw.stickers?.flatMap((sticker): AppliedSticker[] =>
+      sticker.name ? [{ name: sticker.name, slot: sticker.slot ?? 0, iconUrl: sticker.icon_url, wear: sticker.wear }] : [],
+    ),
+    charms: raw.keychains?.flatMap((charm): Charm[] =>
+      charm.name ? [{ name: charm.name, pattern: charm.pattern, iconUrl: charm.icon_url }] : [],
+    ),
+    fadePercent: raw.fade?.percentage,
   };
 }
