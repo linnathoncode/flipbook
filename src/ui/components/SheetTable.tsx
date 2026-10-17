@@ -46,7 +46,7 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
       <thead>
         <tr>
           <th className="chk"><PageCheck visible={visible} selection={selection} /></th>
-          <SortHeader label="Bought" sortKey="bought" {...header} />
+          <SortHeader label="Bought" sortKey="bought" numeric {...header} />
           <SortHeader label="Item" sortKey="name" {...header} />
           <SortHeader label="Float" sortKey="float" numeric {...header} />
           {detailed && <SortHeader label="Adj. float" sortKey="adjusted" numeric title="Where the float sits inside this skin's own range. Trade-ups use this." {...header} />}
@@ -60,7 +60,7 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
           )}
           {sold && (
             <>
-              <SortHeader label="Sold" sortKey="sold" {...header} />
+              <SortHeader label="Sold" sortKey="sold" numeric {...header} />
               <SortHeader label="Sell" sortKey="sellPrice" numeric {...header} />
               <th className="n">Fee</th>
               <SortHeader label="Net" sortKey="net" numeric {...header} />
