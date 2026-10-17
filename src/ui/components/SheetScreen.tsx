@@ -3,7 +3,7 @@ import { deleteFolder, renameFolder } from '../../app/actions';
 import { HOLDS_ID, isDefaultFolder, OTHER_ID, type Folder } from '../../domain/folders';
 import { ITEM_KINDS, itemKind, KIND_PLURAL, type ItemKind } from '../../domain/itemKinds';
 import { EMPTY_FILTER, isUnfiltered, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
-import { formatMoney, formatPercent, formatSignedMoney, plural } from '../format';
+import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
 import type { Selection } from '../useSelection';
 import { SheetTable, type RowDetail } from './SheetTable';
 import { Kpi } from './shared';
@@ -68,7 +68,7 @@ export function SheetScreen({ folder, rows, shown, view, selection, newSince, sy
       <header className="top">
         <FolderTitle folder={folder} rowCount={rows.length} sync={sync} onChange={onChange} onDeleted={onFolderDeleted} />
         <SheetNote folder={folder} />
-        <div className="kpis"><SheetKpis folder={folder} rows={rows} /></div>
+        <div className="kpis"><SheetKpis folder={folder} rows={rows} sync={sync} /></div>
       </header>
       {selection.count > 0 ? (
         <SelectionBar count={selection.count} inOther={folder?.id === OTHER_ID} onMoveMenu={onMoveMenu} onSendToOther={onSendToOther} onClear={selection.clear} />
@@ -120,7 +120,7 @@ function SheetNote({ folder }: { folder?: Folder }) {
   return <p className="note">Nothing in this folder counts toward your flip totals or the export.</p>;
 }
 
-function SheetKpis({ folder, rows }: { folder?: Folder; rows: SheetRow[] }) {
+function SheetKpis({ folder, rows, sync }: { folder?: Folder; rows: SheetRow[]; sync: SyncProps }) {
   const closed = rows.filter((row) => row.status === 'closed');
   const open = rows.filter((row) => row.status === 'open');
   const sales = rows.filter((row) => row.status === 'sale');
@@ -139,6 +139,7 @@ function SheetKpis({ folder, rows }: { folder?: Folder; rows: SheetRow[] }) {
       <>
         <Kpi label="Holding" value={open.length} />
         <Kpi label="Cost" value={formatMoney(sum(open, (row) => row.buyPrice))} />
+        <HoldValue open={open} sync={sync} />
         <Kpi label="Longest held" value={plural(Math.max(0, ...open.map((row) => row.held ?? 0)), 'day')} />
       </>
     );
@@ -154,6 +155,32 @@ function SheetKpis({ folder, rows }: { folder?: Folder; rows: SheetRow[] }) {
       <Kpi label="Win rate" value={closed.length ? `${Math.round((wins / closed.length) * 100)}%` : '0%'} />
       <Kpi label="Avg profit" value={formatPercent(averagePercent)} sign={closed.length ? averagePercent : undefined} />
       <Kpi label="Open" value={open.length} sub={`${formatMoney(sum(open, (row) => row.buyPrice))} in`} />
+    </>
+  );
+}
+
+/** What held items sell for on CSFloat now, and what selling all of them would make. */
+function HoldValue({ open, sync }: { open: SheetRow[]; sync: SyncProps }) {
+  const priced = open.filter((row) => row.quote);
+  const oldest = priced.map((row) => row.quote!.fetchedAt).sort()[0];
+  const paused = sync.pricesPausedUntil !== undefined && Date.parse(sync.pricesPausedUntil) > Date.now();
+  const refreshing = sync.syncState.kind === 'syncing';
+  const status = paused
+    ? 'CSFloat asked for a break; prices resume soon'
+    : priced.length === 0
+      ? 'Not priced yet'
+      : `${priced.length} of ${open.length} priced, ${formatTimeAgo(oldest!)}`;
+  const net = priced.reduce((total, row) => total + row.quote!.net, 0);
+
+  return (
+    <>
+      <Kpi label="Worth now" value={priced.length ? formatMoney(priced.reduce((total, row) => total + row.quote!.price, 0)) : ''} sub={status} />
+      <Kpi label="If sold now" value={priced.length ? formatSignedMoney(net) : ''} sign={priced.length ? net : undefined} sub={priced.length ? 'after the fee' : undefined} />
+      <div className="kpi-action">
+        <button className="btn ghost" onClick={sync.onRefreshPrices} disabled={refreshing || paused}>
+          {refreshing ? 'Pricing…' : 'Refresh prices'}
+        </button>
+      </div>
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { announceJournalUpdated, handleSyncRequests } from '../app/messages';
-import { isSyncStale, syncFromCsfloat, type SyncOutcome } from '../app/sync';
+import { isSyncStale, syncFromCsfloat, type SyncOptions, type SyncOutcome } from '../app/sync';
 import { CSFLOAT_ORIGIN } from '../io/csfloatSync';
 
 const DASHBOARD_URL = chrome.runtime.getURL('dashboard.html');
@@ -9,8 +9,8 @@ const SYNC_INTERVAL_MINUTES = 30;
 let runningSync: Promise<SyncOutcome> | undefined;
 
 /** One sync at a time, however many triggers fire together. */
-function sync(openTabIfNeeded: boolean): Promise<SyncOutcome> {
-  runningSync ??= syncFromCsfloat({ openTabIfNeeded })
+function sync(options: SyncOptions): Promise<SyncOutcome> {
+  runningSync ??= syncFromCsfloat(options)
     .then((outcome) => {
       if (outcome.status === 'synced') announceJournalUpdated();
       return outcome;
@@ -25,7 +25,7 @@ function sync(openTabIfNeeded: boolean): Promise<SyncOutcome> {
 async function syncIfStale(): Promise<void> {
   if (!(await isSyncStale())) return;
   // A failure is stored with the settings; telling the dashboard lets it show the error.
-  await sync(false).catch(announceJournalUpdated);
+  await sync({ openTabIfNeeded: false }).catch(announceJournalUpdated);
 }
 
 handleSyncRequests(sync);

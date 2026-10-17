@@ -1,7 +1,10 @@
 import { detectOwnerSteamId, normalizeCsfloatTrades, type CsfloatTrade } from '../domain/csfloatTrades';
+import { HOLDS_ID } from '../domain/folders';
 import { listingsInResponse, normalizeCsfloatListings } from '../domain/listings';
+import { duePriceNames, PRICE_KEEP_MS, quoteFromResponse, RATE_LIMIT_PAUSE_MS } from '../domain/prices';
+import { loadJournal } from './actions';
 import { withCsfloatSession, type CsfloatSession } from '../io/csfloatSync';
-import { loadSettings, loadTrades, replaceListings, saveSettings, saveTrades } from '../io/journalStore';
+import { loadPrices, loadSettings, loadTrades, replaceListings, savePrices, saveSettings, saveTrades } from '../io/journalStore';
 
 export interface ImportSummary {
   added: number;
@@ -13,11 +16,19 @@ export type SyncOutcome = ({ status: 'synced' } & ImportSummary) | { status: 'sk
 /** Older than this, Flipbook syncs on its own the next time it gets the chance. */
 export const STALE_AFTER_MS = 10 * 60 * 1000;
 
-export async function syncFromCsfloat({ openTabIfNeeded }: { openTabIfNeeded: boolean }): Promise<SyncOutcome> {
+export interface SyncOptions {
+  openTabIfNeeded: boolean;
+  /** Re-price held items even if their quotes are younger than usual. */
+  forcePrices?: boolean;
+}
+
+export async function syncFromCsfloat({ openTabIfNeeded, forcePrices = false }: SyncOptions): Promise<SyncOutcome> {
   try {
     const summary = await withCsfloatSession({ openTabIfNeeded }, async (session) => {
       const stored = await storeCsfloatTrades(await session.trades());
       await syncListings(session);
+      // Prices are a nice-to-have; each one shows its age, so a missed refresh is visible.
+      await refreshHeldPrices(session, forcePrices).catch(() => undefined);
       return stored;
     });
     if (!summary) return { status: 'skipped' };
@@ -60,6 +71,29 @@ async function syncListings(session: CsfloatSession): Promise<void> {
     listingsError = errorText(cause);
   }
   await saveSettings({ ...(await loadSettings()), listingsError });
+}
+
+/**
+ * Prices what's in Holds, asking CSFloat only about items whose quote has run out.
+ * If CSFloat says slow down, whatever came back is kept and prices pause for a while.
+ */
+async function refreshHeldPrices(session: CsfloatSession, force: boolean): Promise<void> {
+  const now = new Date();
+  const { pricesPausedUntil } = await loadSettings();
+  if (pricesPausedUntil && Date.parse(pricesPausedUntil) > now.getTime()) return;
+
+  const journal = await loadJournal();
+  const held = journal.shelved.folders.get(HOLDS_ID)?.openBuys ?? [];
+  const due = duePriceNames(held.map((buy) => buy.item.marketHashName), await loadPrices(), now, force);
+  if (due.length === 0) return;
+
+  const { responses, rateLimited } = await session.cheapestListings(due);
+  const fetchedAt = new Date().toISOString();
+  const quotes = Object.entries(responses).map(([name, body]) => quoteFromResponse(name, body, fetchedAt));
+  await savePrices(quotes, new Date(now.getTime() - PRICE_KEEP_MS).toISOString());
+  if (rateLimited) {
+    await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(now.getTime() + RATE_LIMIT_PAUSE_MS).toISOString() });
+  }
 }
 
 export function errorText(cause: unknown): string {

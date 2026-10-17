@@ -12,5 +12,6 @@ the build copies it into the extension's manifest.
 - Compact and Detailed views. Detailed shows item images, stickers, charms, fade, and float against the skin's float cap.
 - Adjusted float, as trade-ups use it.
 - Open buys you have listed on CSFloat show the asking price and what it would net.
+- Holds show what your items are worth now at CSFloat's cheapest listing, and what selling them would net.
 - Analytics: net profit over time, by month and by item type, with best and worst flips.
 - Export to .xlsx with working formulas.

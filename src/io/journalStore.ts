@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Folder, FolderRule } from '../domain/folders';
 import type { Listing } from '../domain/listings';
+import type { PriceQuote } from '../domain/prices';
 import type { Match, Trade } from '../domain/types';
 import { DEFAULT_FEE_RATE } from '../domain/profit';
 
@@ -12,6 +13,8 @@ export interface Settings {
   lastSyncError?: string;
   /** Why listings couldn't be read last time. Trades still sync when this is set. */
   listingsError?: string;
+  /** Set when CSFloat asked Flipbook to slow down; no prices are fetched before then. */
+  pricesPausedUntil?: string;
   rules: FolderRule[];
   orphansToOther: boolean;
 }
@@ -26,6 +29,7 @@ interface JournalSchema extends DBSchema {
   folders: { key: string; value: Folder };
   placements: { key: string; value: Placement };
   listings: { key: string; value: Listing };
+  prices: { key: string; value: PriceQuote };
 }
 
 interface Placement {
@@ -34,7 +38,7 @@ interface Placement {
 }
 
 const DB_NAME = 'flipbook';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<JournalSchema>> | undefined;
 
@@ -52,6 +56,9 @@ function db() {
       }
       if (oldVersion < 3) {
         database.createObjectStore('listings', { keyPath: 'id' });
+      }
+      if (oldVersion < 4) {
+        database.createObjectStore('prices', { keyPath: 'name' });
       }
     },
   });
@@ -127,4 +134,16 @@ export async function loadListings(): Promise<Listing[]> {
 export async function replaceListings(listings: Listing[]): Promise<void> {
   const tx = (await db()).transaction('listings', 'readwrite');
   await Promise.all([tx.store.clear(), ...listings.map((listing) => tx.store.put(listing)), tx.done]);
+}
+
+export async function loadPrices(): Promise<Map<string, PriceQuote>> {
+  const all = await (await db()).getAll('prices');
+  return new Map(all.map((quote) => [quote.name, quote]));
+}
+
+/** Saves new quotes and drops ones fetched before `keepAfter`, which belong to items no longer held. */
+export async function savePrices(quotes: PriceQuote[], keepAfter: string): Promise<void> {
+  const tx = (await db()).transaction('prices', 'readwrite');
+  const stale = (await tx.store.getAll()).filter((quote) => quote.fetchedAt < keepAfter);
+  await Promise.all([...stale.map((quote) => tx.store.delete(quote.name)), ...quotes.map((quote) => tx.store.put(quote)), tx.done]);
 }

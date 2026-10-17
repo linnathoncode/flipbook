@@ -810,6 +810,27 @@ thead:hover .chk input {
   font-weight: 500;
 }
 
+/* Figures from today's price rather than a sale: softer, with a dotted line that says "hover for where this came from". */
+.est {
+  color: var(--muted);
+  text-decoration: underline dotted color-mix(in srgb, var(--muted) 60%, transparent);
+  text-underline-offset: 3px;
+}
+
+.est.pos {
+  color: color-mix(in srgb, var(--pos) 65%, var(--muted));
+}
+
+.est.neg {
+  color: color-mix(in srgb, var(--neg) 65%, var(--muted));
+}
+
+.kpi-action {
+  display: flex;
+  align-items: flex-end;
+  margin-left: -20px;
+}
+
 .tag.listed {
   margin-left: 0;
   color: var(--ink);

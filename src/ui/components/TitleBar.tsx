@@ -10,6 +10,10 @@ export interface SyncProps {
   lastSyncError?: string;
   syncState: SyncState;
   onSync: () => void;
+  /** Syncs and re-prices held items now. */
+  onRefreshPrices: () => void;
+  /** CSFloat asked for a break from price requests until then. */
+  pricesPausedUntil?: string;
   theme: Theme;
   onToggleTheme: () => void;
 }

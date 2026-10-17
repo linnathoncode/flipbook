@@ -62,6 +62,9 @@ More things you can do:
 - **Adj. float** is where the float sits inside that skin's own range: (float − min) / (max − min). Trade-ups use this now.
 - **Listed** shows in place of Open when an item is up for sale on CSFloat, with your asking price.
   Hover it to see what you'd net if it sells there. Listings refresh with every sync.
+- **Worth now** on Holds prices each held item at its cheapest CSFloat listing, and **If sold now** is what that nets
+  after the fee. Prices are cached: 6 hours, or 1 hour for items over $100. **Refresh prices** skips anything priced in
+  the last 5 minutes, and if CSFloat rate-limits the lookups, Flipbook waits 30 minutes before asking again.
 - **Filters** narrows by item type and result (open, listed, wins, losses). Click a column header to sort.
 - **Rows per page** sets the page size (25, 50, 100 or all).
 - **Needs review** lists sales that could have come from more than one buy. Pick the right one and it's paired for good.

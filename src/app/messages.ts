@@ -1,28 +1,28 @@
-import { errorText, type SyncOutcome } from './sync';
+import { errorText, type SyncOptions, type SyncOutcome } from './sync';
 
 /** Messages between the dashboard and the background worker, which owns syncing. */
 const SYNC_REQUEST = 'flipbook/sync';
 const JOURNAL_UPDATED = 'flipbook/journal-updated';
 
-interface SyncRequest {
+interface SyncRequest extends SyncOptions {
   type: typeof SYNC_REQUEST;
-  openTabIfNeeded: boolean;
 }
 
 type SyncReply = { ok: true; outcome: SyncOutcome } | { ok: false; error: string };
 type Message = { type?: string };
 
-export async function requestSync(openTabIfNeeded: boolean): Promise<SyncOutcome> {
-  const request: SyncRequest = { type: SYNC_REQUEST, openTabIfNeeded };
+export async function requestSync(options: SyncOptions): Promise<SyncOutcome> {
+  const request: SyncRequest = { type: SYNC_REQUEST, ...options };
   const reply = (await chrome.runtime.sendMessage(request)) as SyncReply;
   if (!reply.ok) throw new Error(reply.error);
   return reply.outcome;
 }
 
-export function handleSyncRequests(sync: (openTabIfNeeded: boolean) => Promise<SyncOutcome>): void {
+export function handleSyncRequests(sync: (options: SyncOptions) => Promise<SyncOutcome>): void {
   chrome.runtime.onMessage.addListener((message: Message, _sender, reply: (response: SyncReply) => void) => {
     if (message.type !== SYNC_REQUEST) return false;
-    sync((message as SyncRequest).openTabIfNeeded)
+    const { openTabIfNeeded, forcePrices } = message as SyncRequest;
+    sync({ openTabIfNeeded, forcePrices })
       .then((outcome) => reply({ ok: true, outcome }))
       .catch((cause: unknown) => reply({ ok: false, error: errorText(cause) }));
     return true; // Keeps the channel open for the async reply.

@@ -3,6 +3,7 @@ import type { Section } from './folders';
 import { itemKind, type ItemKind } from './itemKinds';
 import type { UnmatchedEntry } from './journal';
 import type { Listing } from './listings';
+import type { PriceQuote } from './prices';
 import { centsToDollars, heldDays, type Flip } from './profit';
 import type { Item, MatchConfidence, Trade } from './types';
 
@@ -33,6 +34,24 @@ export interface SheetRow {
   held?: number;
   /** An open buy that is up for sale on CSFloat, with what it would make at that price. */
   listing?: ListedFor;
+  /** An open buy priced at what it sells for on CSFloat now, and what selling there would make. */
+  quote?: PricedAt;
+}
+
+export interface PricedAt {
+  price: number;
+  estimate?: number;
+  fetchedAt: string;
+  net: number;
+  percent: number;
+}
+
+/** What the market says about open buys: which are listed, and what items sell for now. */
+export interface MarketData {
+  /** Open buy id to the listing selling it. */
+  listed?: ReadonlyMap<string, Listing>;
+  /** Market hash name to its latest price. */
+  prices?: ReadonlyMap<string, PriceQuote>;
 }
 
 export interface ListedFor {
@@ -45,10 +64,9 @@ export interface ListedFor {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** `listed` maps open buy ids to the listing selling them. */
-export function sectionRows(section: Section, feeRate: number, now: Date, listed: ReadonlyMap<string, Listing> = new Map()): SheetRow[] {
+export function sectionRows(section: Section, feeRate: number, now: Date, market: MarketData = {}): SheetRow[] {
   return [
-    ...section.openBuys.map((buy) => openRow(buy, now, feeRate, listed.get(buy.id))),
+    ...section.openBuys.map((buy) => openRow(buy, now, feeRate, market.listed?.get(buy.id), market.prices?.get(buy.item.marketHashName))),
     ...section.flips.map(flipRow),
     ...section.sales.map((entry) => saleRow(entry, feeRate)),
   ];
@@ -77,7 +95,7 @@ function flipRow(flip: Flip): SheetRow {
   };
 }
 
-function openRow(buy: Trade, now: Date, feeRate: number, listing?: Listing): SheetRow {
+function openRow(buy: Trade, now: Date, feeRate: number, listing?: Listing, quote?: PriceQuote): SheetRow {
   const buyPrice = centsToDollars(buy.priceCents);
   return {
     key: `open:${buy.id}`,
@@ -90,13 +108,26 @@ function openRow(buy: Trade, now: Date, feeRate: number, listing?: Listing): She
     buyPrice,
     held: Math.max(0, Math.floor((now.getTime() - Date.parse(buy.at)) / DAY_MS)),
     listing: listing && listedFor(listing, buyPrice, feeRate),
+    quote: quote?.priceCents === undefined ? undefined : pricedAt(quote, quote.priceCents, buyPrice, feeRate),
+  };
+}
+
+function pricedAt(quote: PriceQuote, priceCents: number, buyPrice: number, feeRate: number): PricedAt {
+  return {
+    ...ifSoldAt(centsToDollars(priceCents), buyPrice, feeRate),
+    estimate: quote.estimateCents === undefined ? undefined : centsToDollars(quote.estimateCents),
+    fetchedAt: quote.fetchedAt,
   };
 }
 
 function listedFor(listing: Listing, buyPrice: number, feeRate: number): ListedFor {
-  const price = centsToDollars(listing.priceCents);
+  return { ...ifSoldAt(centsToDollars(listing.priceCents), buyPrice, feeRate), listedAt: listing.listedAt, auction: listing.auction };
+}
+
+/** What an open buy would make sold at `price`, after the fee, the same way a closed flip is worked out. */
+function ifSoldAt(price: number, buyPrice: number, feeRate: number) {
   const net = price * (1 - feeRate) - buyPrice;
-  return { price, listedAt: listing.listedAt, auction: listing.auction, net, percent: buyPrice > 0 ? (net / buyPrice) * 100 : 0 };
+  return { price, net, percent: buyPrice > 0 ? (net / buyPrice) * 100 : 0 };
 }
 
 function saleRow(entry: UnmatchedEntry, feeRate: number): SheetRow {

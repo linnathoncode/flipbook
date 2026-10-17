@@ -6,6 +6,7 @@ import {
   deleteFolder as deleteStoredFolder,
   loadFolders,
   loadListings,
+  loadPrices,
   loadLockedMatches,
   loadPlacements,
   loadSettings,
@@ -19,13 +20,14 @@ import {
 } from '../io/journalStore';
 
 export async function loadJournal() {
-  const [trades, lockedMatches, settings, storedFolders, placements, listings] = await Promise.all([
+  const [trades, lockedMatches, settings, storedFolders, placements, listings, prices] = await Promise.all([
     loadTrades(),
     loadLockedMatches(),
     loadSettings(),
     loadFolders(),
     loadPlacements(),
     loadListings(),
+    loadPrices(),
   ]);
   const view = buildJournalView(trades, lockedMatches, settings.feeRate);
   const folders = withDefaultFolders(storedFolders);
@@ -37,6 +39,8 @@ export async function loadJournal() {
     review: view.unmatchedSells.filter((entry) => entry.reason === 'ambiguous'),
     /** Open buy id to the CSFloat listing selling it. */
     listed: listedBuys(view.openBuys, listings),
+    /** Market hash name to the latest CSFloat price for held items. */
+    prices,
   };
 }
 

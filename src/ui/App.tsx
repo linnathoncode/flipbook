@@ -25,7 +25,7 @@ const DEFAULT_SORT: Sort = { key: 'bought', descending: true };
 const FLIPS: MenuTarget = { id: null, name: 'Flips' };
 
 export function App() {
-  const { journal, error, refresh, sync, syncState } = useJournal();
+  const { journal, error, refresh, sync, refreshPrices, syncState } = useJournal();
   const [theme, toggleTheme] = useTheme();
   const lastVisit = useLastVisit();
   const [place, setPlace] = useState<Place>({ kind: 'flips' });
@@ -47,7 +47,7 @@ export function App() {
   const folder = place.kind === 'folder' ? journal?.folders.find((candidate) => candidate.id === place.folderId) : undefined;
   const current: Place = place.kind === 'folder' && journal && !folder ? { kind: 'flips' } : place;
   const section = journal && sectionAt(journal, current);
-  const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date(), journal.listed) : [];
+  const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date(), { listed: journal.listed, prices: journal.prices }) : [];
   const shown = sortRows(filterRows(rows, filter), sort);
 
   useKeyboard({
@@ -97,6 +97,8 @@ export function App() {
     lastSyncError: journal.settings.lastSyncError,
     syncState,
     onSync: sync,
+    onRefreshPrices: refreshPrices,
+    pricesPausedUntil: journal.settings.pricesPausedUntil,
     theme,
     onToggleTheme: toggleTheme,
   };

@@ -24,16 +24,20 @@ export function useJournal() {
     }
   }, []);
 
-  const sync = useCallback(async () => {
+  const run = useCallback(async (forcePrices: boolean) => {
     setSyncState({ kind: 'syncing' });
     try {
-      await requestSync(true);
+      await requestSync({ openTabIfNeeded: true, forcePrices });
       setSyncState({ kind: 'idle' });
     } catch (cause) {
       setSyncState({ kind: 'failed', error: errorText(cause) });
     }
     await refresh();
   }, [refresh]);
+
+  const sync = useCallback(() => run(false), [run]);
+  /** Syncs and re-prices held items even if their quotes haven't run out yet. */
+  const refreshPrices = useCallback(() => run(true), [run]);
 
   useEffect(() => {
     void refresh();
@@ -48,5 +52,5 @@ export function useJournal() {
     });
   }, [sync]);
 
-  return { journal, error, refresh, sync, syncState };
+  return { journal, error, refresh, sync, refreshPrices, syncState };
 }

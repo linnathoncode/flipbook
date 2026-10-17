@@ -1,8 +1,8 @@
 import { useEffect, useRef, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import { adjustedFloat, floatRange, type FloatRange } from '../../domain/floatRanges';
-import { totalRows, type ListedFor, type SheetRow, type Sort } from '../../domain/listFilters';
+import { totalRows, type ListedFor, type PricedAt, type SheetRow, type Sort } from '../../domain/listFilters';
 import type { Item } from '../../domain/types';
-import { formatDate, formatDays, formatFloat, formatMoney, formatPercent, formatSignedMoney, plural } from '../format';
+import { formatDate, formatDays, formatFloat, formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
 import { rarityColor } from '../rarity';
 import { steamImageUrl } from '../steamImages';
 import type { Entry, Selection } from '../useSelection';
@@ -94,10 +94,12 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
               {detailed && <td className="n"><AdjustedFloatCell item={row.item} /></td>}
               <td className="n">{formatMoney(row.buyPrice)}</td>
               <td className="n m">{formatDate(row.soldAt)}</td>
-              <td className="n">{formatMoney(row.sellPrice)}</td>
+              <td className="n">{row.quote ? <Estimate quote={row.quote}>{formatMoney(row.quote.price)}</Estimate> : formatMoney(row.sellPrice)}</td>
               <td className="n m">{formatMoney(row.fee)}</td>
               <td className={`n pl ${signClass(row.net)}`}><NetCell row={row} onPickBuy={onPickBuy} /></td>
-              <td className={`n pl ${signClass(row.percent)}`}>{row.percent === undefined ? '' : formatPercent(row.percent)}</td>
+              <td className={`n pl ${signClass(row.percent)}`}>
+                {row.quote ? <Estimate quote={row.quote} signed={row.quote.percent}>{formatPercent(row.quote.percent)}</Estimate> : row.percent === undefined ? '' : formatPercent(row.percent)}
+              </td>
               <td className="n m">{formatDays(row.held)}</td>
               <td>{row.match && <MatchLabel confidence={row.match} />}</td>
             </tr>
@@ -126,6 +128,7 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
 
 function NetCell({ row, onPickBuy }: { row: SheetRow; onPickBuy: () => void }) {
   if (row.listing) return <ListedTag listing={row.listing} />;
+  if (row.quote) return <Estimate quote={row.quote} signed={row.quote.net}>{formatSignedMoney(row.quote.net)}</Estimate>;
   if (row.status === 'open') return <span className="tag open">Open</span>;
   if (row.ambiguous) return <button className="link" onClick={onPickBuy}>Pick buy</button>;
   if (row.status === 'sale') return <span className="tag open">No buy</span>;
@@ -139,6 +142,20 @@ function ListedTag({ listing }: { listing: ListedFor }) {
   return (
     <span className="tag listed" title={hint}>
       {listing.auction ? 'Auction' : 'Listed'} {formatMoney(listing.price)}
+    </span>
+  );
+}
+
+/**
+ * A figure for an open buy worked out from today's CSFloat price, not from a sale.
+ * Muted, so it never reads as money already made.
+ */
+function Estimate({ quote, signed, children }: { quote: PricedAt; signed?: number; children: ReactNode }) {
+  const estimate = quote.estimate === undefined ? '' : ` CSFloat estimates ${formatMoney(quote.estimate)}.`;
+  const hint = `Cheapest CSFloat listing ${formatTimeAgo(quote.fetchedAt)}: ${formatMoney(quote.price)}.${estimate} Sold there, this nets ${formatSignedMoney(quote.net)} after the fee.`;
+  return (
+    <span className={`est ${signed === undefined ? '' : signClass(signed)}`} title={hint}>
+      {children}
     </span>
   );
 }

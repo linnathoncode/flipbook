@@ -61,7 +61,7 @@ describe('listed rows', () => {
     const held = trade('buy', sticker('Sticker | Titan'), '2026-10-02', 1000);
     const view = buildJournalView([buy, held], [], 0);
     const listed = listedBuys(view.openBuys, [listing(sticker('Sticker | Crown (Foil)'), 1500)]);
-    const rows = sectionRows({ flips: view.flips, openBuys: view.openBuys, sales: [] }, 0.02, NOW, listed);
+    const rows = sectionRows({ flips: view.flips, openBuys: view.openBuys, sales: [] }, 0.02, NOW, { listed });
 
     const row = rows.find((entry) => entry.buy?.id === buy.id)!;
     expect(row.listing!.price).toBe(15);
