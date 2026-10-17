@@ -60,7 +60,9 @@ More things you can do:
 - **Compact / Detailed** switches the table. Detailed shows the item image, pattern seed, fade %, stickers and charms,
   and the float on a wear bar with the skin's float cap hatched out.
 - **Adj. float** is where the float sits inside that skin's own range: (float − min) / (max − min). Trade-ups use this now.
-- **Filters** narrows by item type and result (open, wins, losses). Click a column header to sort.
+- **Listed** shows in place of Open when an item is up for sale on CSFloat, with your asking price.
+  Hover it to see what you'd net if it sells there. Listings refresh with every sync.
+- **Filters** narrows by item type and result (open, listed, wins, losses). Click a column header to sort.
 - **Rows per page** sets the page size (25, 50, 100 or all).
 - **Needs review** lists sales that could have come from more than one buy. Pick the right one and it's paired for good.
 - **Analytics** charts your net profit over time, by month and by item type, with your best and worst flips.

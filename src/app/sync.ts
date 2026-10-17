@@ -1,6 +1,7 @@
 import { detectOwnerSteamId, normalizeCsfloatTrades, type CsfloatTrade } from '../domain/csfloatTrades';
-import { fetchAllCsfloatTrades } from '../io/csfloatSync';
-import { loadSettings, loadTrades, saveSettings, saveTrades } from '../io/journalStore';
+import { listingsInResponse, normalizeCsfloatListings } from '../domain/listings';
+import { withCsfloatSession, type CsfloatSession } from '../io/csfloatSync';
+import { loadSettings, loadTrades, replaceListings, saveSettings, saveTrades } from '../io/journalStore';
 
 export interface ImportSummary {
   added: number;
@@ -14,9 +15,12 @@ export const STALE_AFTER_MS = 10 * 60 * 1000;
 
 export async function syncFromCsfloat({ openTabIfNeeded }: { openTabIfNeeded: boolean }): Promise<SyncOutcome> {
   try {
-    const raw = await fetchAllCsfloatTrades({ openTabIfNeeded });
-    if (!raw) return { status: 'skipped' };
-    const summary = await storeCsfloatTrades(raw);
+    const summary = await withCsfloatSession({ openTabIfNeeded }, async (session) => {
+      const stored = await storeCsfloatTrades(await session.trades());
+      await syncListings(session);
+      return stored;
+    });
+    if (!summary) return { status: 'skipped' };
     await saveSettings({ ...(await loadSettings()), lastSyncAt: new Date().toISOString(), lastSyncError: undefined });
     return { status: 'synced', ...summary };
   } catch (cause) {
@@ -40,6 +44,22 @@ export async function storeCsfloatTrades(raw: CsfloatTrade[]): Promise<ImportSum
   const trades = normalizeCsfloatTrades(raw, ownerSteamId);
   await saveTrades(trades);
   return { added: trades.filter((trade) => !existingIds.has(trade.id)).length, total: trades.length };
+}
+
+/**
+ * Listings are extra: if CSFloat won't give them, the trades still count as synced,
+ * the last good snapshot stays, and Settings says what went wrong.
+ */
+async function syncListings(session: CsfloatSession): Promise<void> {
+  const { ownerSteamId } = await loadSettings();
+  if (!ownerSteamId) return;
+  let listingsError: string | undefined;
+  try {
+    await replaceListings(normalizeCsfloatListings(listingsInResponse(await session.listings(ownerSteamId))));
+  } catch (cause) {
+    listingsError = errorText(cause);
+  }
+  await saveSettings({ ...(await loadSettings()), listingsError });
 }
 
 export function errorText(cause: unknown): string {

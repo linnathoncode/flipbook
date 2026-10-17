@@ -47,7 +47,7 @@ export function App() {
   const folder = place.kind === 'folder' ? journal?.folders.find((candidate) => candidate.id === place.folderId) : undefined;
   const current: Place = place.kind === 'folder' && journal && !folder ? { kind: 'flips' } : place;
   const section = journal && sectionAt(journal, current);
-  const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date()) : [];
+  const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date(), journal.listed) : [];
   const shown = sortRows(filterRows(rows, filter), sort);
 
   useKeyboard({
@@ -221,6 +221,7 @@ export function App() {
             feeRate={journal.settings.feeRate}
             rules={journal.settings.rules}
             orphansToOther={journal.settings.orphansToOther}
+            listingsError={journal.settings.listingsError}
             folders={journal.folders}
             sync={syncProps}
             onChange={refresh}

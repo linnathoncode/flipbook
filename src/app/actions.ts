@@ -1,9 +1,11 @@
 import { FLIPS_ID, isDefaultFolder, shelve, withDefaultFolders, type Folder } from '../domain/folders';
 import type { ItemKind } from '../domain/itemKinds';
 import { buildJournalView } from '../domain/journal';
+import { listedBuys } from '../domain/listings';
 import {
   deleteFolder as deleteStoredFolder,
   loadFolders,
+  loadListings,
   loadLockedMatches,
   loadPlacements,
   loadSettings,
@@ -17,12 +19,13 @@ import {
 } from '../io/journalStore';
 
 export async function loadJournal() {
-  const [trades, lockedMatches, settings, storedFolders, placements] = await Promise.all([
+  const [trades, lockedMatches, settings, storedFolders, placements, listings] = await Promise.all([
     loadTrades(),
     loadLockedMatches(),
     loadSettings(),
     loadFolders(),
     loadPlacements(),
+    loadListings(),
   ]);
   const view = buildJournalView(trades, lockedMatches, settings.feeRate);
   const folders = withDefaultFolders(storedFolders);
@@ -32,6 +35,8 @@ export async function loadJournal() {
     shelved: shelve(view, { placements, folders, rules: settings.rules, orphansToOther: settings.orphansToOther }),
     /** Sales more than one buy could be. Wherever they're filed, only the user can pair them. */
     review: view.unmatchedSells.filter((entry) => entry.reason === 'ambiguous'),
+    /** Open buy id to the CSFloat listing selling it. */
+    listed: listedBuys(view.openBuys, listings),
   };
 }
 

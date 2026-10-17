@@ -810,6 +810,14 @@ thead:hover .chk input {
   font-weight: 500;
 }
 
+.tag.listed {
+  margin-left: 0;
+  color: var(--ink);
+  text-decoration: underline dotted color-mix(in srgb, var(--ink) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: default;
+}
+
 .tag.pending {
   margin-left: 8px;
   color: var(--muted);

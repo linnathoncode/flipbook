@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Folder, FolderRule } from '../domain/folders';
+import type { Listing } from '../domain/listings';
 import type { Match, Trade } from '../domain/types';
 import { DEFAULT_FEE_RATE } from '../domain/profit';
 
@@ -9,6 +10,8 @@ export interface Settings {
   lastSyncAt?: string;
   /** Why the most recent sync failed; cleared by the next success. */
   lastSyncError?: string;
+  /** Why listings couldn't be read last time. Trades still sync when this is set. */
+  listingsError?: string;
   rules: FolderRule[];
   orphansToOther: boolean;
 }
@@ -22,6 +25,7 @@ interface JournalSchema extends DBSchema {
   meta: { key: string; value: Settings };
   folders: { key: string; value: Folder };
   placements: { key: string; value: Placement };
+  listings: { key: string; value: Listing };
 }
 
 interface Placement {
@@ -30,7 +34,7 @@ interface Placement {
 }
 
 const DB_NAME = 'flipbook';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<JournalSchema>> | undefined;
 
@@ -45,6 +49,9 @@ function db() {
       if (oldVersion < 2) {
         database.createObjectStore('folders', { keyPath: 'id' });
         database.createObjectStore('placements', { keyPath: 'tradeId' });
+      }
+      if (oldVersion < 3) {
+        database.createObjectStore('listings', { keyPath: 'id' });
       }
     },
   });
@@ -110,4 +117,14 @@ export async function loadPlacements(): Promise<Map<string, string>> {
 export async function placeTrades(tradeIds: string[], folderId: string): Promise<void> {
   const tx = (await db()).transaction('placements', 'readwrite');
   await Promise.all([...tradeIds.map((tradeId) => tx.store.put({ tradeId, folderId })), tx.done]);
+}
+
+export async function loadListings(): Promise<Listing[]> {
+  return (await db()).getAll('listings');
+}
+
+/** Listings are a snapshot: anything not listed any more drops out. */
+export async function replaceListings(listings: Listing[]): Promise<void> {
+  const tx = (await db()).transaction('listings', 'readwrite');
+  await Promise.all([tx.store.clear(), ...listings.map((listing) => tx.store.put(listing)), tx.done]);
 }

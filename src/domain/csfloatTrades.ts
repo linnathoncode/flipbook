@@ -13,7 +13,7 @@ export interface CsfloatTrade {
   };
 }
 
-interface CsfloatItem {
+export interface CsfloatItem {
   market_hash_name: string;
   item_name?: string;
   wear_name?: string;
@@ -68,7 +68,7 @@ export function normalizeCsfloatTrades(raw: CsfloatTrade[], ownerSteamId: string
     }));
 }
 
-function normalizeItem(raw: CsfloatItem): Item {
+export function normalizeItem(raw: CsfloatItem): Item {
   return {
     marketHashName: raw.market_hash_name,
     itemName: raw.item_name ?? raw.market_hash_name,

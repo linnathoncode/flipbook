@@ -17,6 +17,7 @@ const SMALLEST_PAGE = PAGE_SIZES[0];
 const RESULTS: { value: ResultFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'open', label: 'Open' },
+  { value: 'listed', label: 'Listed' },
   { value: 'win', label: 'Wins' },
   { value: 'loss', label: 'Losses' },
 ];

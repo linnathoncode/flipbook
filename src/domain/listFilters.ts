@@ -2,6 +2,7 @@ import { adjustedFloat } from './floatRanges';
 import type { Section } from './folders';
 import { itemKind, type ItemKind } from './itemKinds';
 import type { UnmatchedEntry } from './journal';
+import type { Listing } from './listings';
 import { centsToDollars, heldDays, type Flip } from './profit';
 import type { Item, MatchConfidence, Trade } from './types';
 
@@ -30,13 +31,24 @@ export interface SheetRow {
   net?: number;
   percent?: number;
   held?: number;
+  /** An open buy that is up for sale on CSFloat, with what it would make at that price. */
+  listing?: ListedFor;
+}
+
+export interface ListedFor {
+  price: number;
+  listedAt: string;
+  auction: boolean;
+  net: number;
+  percent: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function sectionRows(section: Section, feeRate: number, now: Date): SheetRow[] {
+/** `listed` maps open buy ids to the listing selling them. */
+export function sectionRows(section: Section, feeRate: number, now: Date, listed: ReadonlyMap<string, Listing> = new Map()): SheetRow[] {
   return [
-    ...section.openBuys.map((buy) => openRow(buy, now)),
+    ...section.openBuys.map((buy) => openRow(buy, now, feeRate, listed.get(buy.id))),
     ...section.flips.map(flipRow),
     ...section.sales.map((entry) => saleRow(entry, feeRate)),
   ];
@@ -65,7 +77,8 @@ function flipRow(flip: Flip): SheetRow {
   };
 }
 
-function openRow(buy: Trade, now: Date): SheetRow {
+function openRow(buy: Trade, now: Date, feeRate: number, listing?: Listing): SheetRow {
+  const buyPrice = centsToDollars(buy.priceCents);
   return {
     key: `open:${buy.id}`,
     status: 'open',
@@ -74,9 +87,16 @@ function openRow(buy: Trade, now: Date): SheetRow {
     buy,
     ambiguous: false,
     boughtAt: buy.at,
-    buyPrice: centsToDollars(buy.priceCents),
+    buyPrice,
     held: Math.max(0, Math.floor((now.getTime() - Date.parse(buy.at)) / DAY_MS)),
+    listing: listing && listedFor(listing, buyPrice, feeRate),
   };
+}
+
+function listedFor(listing: Listing, buyPrice: number, feeRate: number): ListedFor {
+  const price = centsToDollars(listing.priceCents);
+  const net = price * (1 - feeRate) - buyPrice;
+  return { price, listedAt: listing.listedAt, auction: listing.auction, net, percent: buyPrice > 0 ? (net / buyPrice) * 100 : 0 };
 }
 
 function saleRow(entry: UnmatchedEntry, feeRate: number): SheetRow {
@@ -94,7 +114,7 @@ function saleRow(entry: UnmatchedEntry, feeRate: number): SheetRow {
   };
 }
 
-export type ResultFilter = 'all' | 'open' | 'win' | 'loss';
+export type ResultFilter = 'all' | 'open' | 'listed' | 'win' | 'loss';
 
 export interface ListFilter {
   query: string;
@@ -121,6 +141,7 @@ export function filterRows(rows: SheetRow[], filter: ListFilter): SheetRow[] {
 
 function matchesResult(row: SheetRow, result: ResultFilter): boolean {
   if (result === 'open') return row.status === 'open';
+  if (result === 'listed') return row.listing !== undefined;
   if (result === 'win') return row.net !== undefined && row.net >= 0;
   if (result === 'loss') return row.net !== undefined && row.net < 0;
   return true;

@@ -2,46 +2,56 @@ import type { CsfloatTrade, CsfloatTradesPage } from '../domain/csfloatTrades';
 
 export const CSFLOAT_ORIGIN = 'https://csfloat.com';
 const PAGE_SIZE = 100;
+const LISTINGS_PAGE_SIZE = 40;
 /** Hard stop so a misbehaving API can't loop forever. */
 const MAX_PAGES = 100;
 
+/** Requests made through the user's logged-in CSFloat tab. */
+export interface CsfloatSession {
+  /** The full trade history. */
+  trades(): Promise<CsfloatTrade[]>;
+  /** What the account has listed right now, as CSFloat sent it. */
+  listings(steamId: string): Promise<unknown[]>;
+}
+
 /**
- * Downloads the full trade history using the user's logged-in CSFloat session.
- *
- * The request runs inside a csfloat.com tab, so the browser attaches the
- * session cookie itself — no API key is ever read or stored by the extension.
+ * Runs `use` with requests that execute inside a csfloat.com tab, so the browser attaches the
+ * session cookie itself. No API key is ever read or stored by the extension.
  *
  * Returns undefined when no CSFloat tab is open and opening one isn't allowed,
  * so background syncs never pop up tabs on their own.
  */
-export async function fetchAllCsfloatTrades({
-  openTabIfNeeded,
-}: {
-  openTabIfNeeded: boolean;
-}): Promise<CsfloatTrade[] | undefined> {
+export async function withCsfloatSession<T>(
+  { openTabIfNeeded }: { openTabIfNeeded: boolean },
+  use: (session: CsfloatSession) => Promise<T>,
+): Promise<T | undefined> {
   const existingTabId = await findCsfloatTab();
   if (existingTabId === undefined && !openTabIfNeeded) return undefined;
   const { tabId, openedByUs } =
     existingTabId === undefined ? await openCsfloatTab() : { tabId: existingTabId, openedByUs: false };
-  try {
-    const [injection] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: fetchTradePagesInPage,
-      args: [PAGE_SIZE, MAX_PAGES],
-    });
-    const result = injection?.result as PageFetchResult | undefined;
+
+  const run = async <R>(func: (...args: never[]) => Promise<PageResult<R>>, args: unknown[]): Promise<R> => {
+    const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: func as () => Promise<PageResult<R>>, args: args as [] });
+    const result = injection?.result as PageResult<R> | undefined;
     if (!result) throw new Error('CSFloat tab did not return a result.');
     if ('error' in result) throw new Error(result.error);
-    return result.trades;
+    return result.value;
+  };
+
+  try {
+    return await use({
+      trades: () => run(fetchTradePagesInPage, [PAGE_SIZE, MAX_PAGES]),
+      listings: (steamId) => run(fetchListingPagesInPage, [steamId, LISTINGS_PAGE_SIZE, MAX_PAGES]),
+    });
   } finally {
     if (openedByUs) await chrome.tabs.remove(tabId);
   }
 }
 
-type PageFetchResult = { trades: CsfloatTrade[] } | { error: string };
+type PageResult<T> = { value: T } | { error: string };
 
 /** Runs in the csfloat.com page context. Must stay self-contained: no imports or closures. */
-async function fetchTradePagesInPage(pageSize: number, maxPages: number): Promise<PageFetchResult> {
+async function fetchTradePagesInPage(pageSize: number, maxPages: number): Promise<PageResult<CsfloatTrade[]>> {
   const trades: CsfloatTrade[] = [];
   for (let page = 0; page < maxPages; page++) {
     const response = await fetch(`/api/v1/me/trades?page=${page}&limit=${pageSize}`, {
@@ -55,9 +65,32 @@ async function fetchTradePagesInPage(pageSize: number, maxPages: number): Promis
     const body = (await response.json()) as CsfloatTradesPage;
     trades.push(...body.trades);
     const isLastPage = body.trades.length === 0 || trades.length >= body.count;
-    if (isLastPage) return { trades };
+    if (isLastPage) return { value: trades };
   }
-  return { trades };
+  return { value: trades };
+}
+
+/**
+ * Runs in the csfloat.com page context. Your stall is the list of your active listings.
+ * Pages follow CSFloat's cursor; a bare array means it all came in one go.
+ */
+async function fetchListingPagesInPage(steamId: string, pageSize: number, maxPages: number): Promise<PageResult<unknown[]>> {
+  const listings: unknown[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const query = `limit=${pageSize}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const response = await fetch(`/api/v1/users/${encodeURIComponent(steamId)}/stall?${query}`, { credentials: 'include' });
+    if (!response.ok) return { error: `CSFloat returned HTTP ${response.status} for your listings.` };
+
+    const body = (await response.json()) as unknown;
+    if (Array.isArray(body)) return { value: [...listings, ...body] };
+    const { data, cursor: next } = (body ?? {}) as { data?: unknown[]; cursor?: string };
+    if (!Array.isArray(data)) return { error: 'CSFloat sent listings in a shape Flipbook does not know.' };
+    listings.push(...data);
+    if (!next || next === cursor || data.length < pageSize) return { value: listings };
+    cursor = next;
+  }
+  return { value: listings };
 }
 
 /** A loaded, awake tab can run the fetch; a discarded one can't. */

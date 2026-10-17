@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import { adjustedFloat, floatRange, type FloatRange } from '../../domain/floatRanges';
-import { totalRows, type SheetRow, type Sort } from '../../domain/listFilters';
+import { totalRows, type ListedFor, type SheetRow, type Sort } from '../../domain/listFilters';
 import type { Item } from '../../domain/types';
 import { formatDate, formatDays, formatFloat, formatMoney, formatPercent, formatSignedMoney, plural } from '../format';
 import { rarityColor } from '../rarity';
@@ -125,10 +125,22 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
 }
 
 function NetCell({ row, onPickBuy }: { row: SheetRow; onPickBuy: () => void }) {
+  if (row.listing) return <ListedTag listing={row.listing} />;
   if (row.status === 'open') return <span className="tag open">Open</span>;
   if (row.ambiguous) return <button className="link" onClick={onPickBuy}>Pick buy</button>;
   if (row.status === 'sale') return <span className="tag open">No buy</span>;
   return <>{row.net === undefined ? '' : formatSignedMoney(row.net)}</>;
+}
+
+/** An open buy that's up for sale: the asking price, and what it nets if it sells there. */
+function ListedTag({ listing }: { listing: ListedFor }) {
+  const what = listing.auction ? 'Auction from' : 'Listed at';
+  const hint = `${what} ${formatMoney(listing.price)} since ${formatDate(listing.listedAt)}. Nets ${formatSignedMoney(listing.net)} (${formatPercent(listing.percent)}) if it sells there.`;
+  return (
+    <span className="tag listed" title={hint}>
+      {listing.auction ? 'Auction' : 'Listed'} {formatMoney(listing.price)}
+    </span>
+  );
 }
 
 function MatchLabel({ confidence }: { confidence: SheetRow['match'] & string }) {

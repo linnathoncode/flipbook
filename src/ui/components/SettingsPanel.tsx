@@ -11,12 +11,13 @@ interface Props {
   feeRate: number;
   rules: FolderRule[];
   orphansToOther: boolean;
+  listingsError?: string;
   folders: Folder[];
   sync: SyncProps;
   onChange: () => void;
 }
 
-export function SettingsPanel({ feeRate, rules, orphansToOther, folders, sync, onChange }: Props) {
+export function SettingsPanel({ feeRate, rules, orphansToOther, listingsError, folders, sync, onChange }: Props) {
   const onFeeChange = (event: ChangeEvent<HTMLInputElement>) => {
     const percent = Number(event.target.value);
     if (Number.isFinite(percent) && percent >= 0) void updateFeeRate(percent / PERCENT).then(onChange);
@@ -35,6 +36,11 @@ export function SettingsPanel({ feeRate, rules, orphansToOther, folders, sync, o
         >
           <button className="btn" onClick={sync.onSync}>Sync now</button>
         </Row>
+        {listingsError && (
+          <Row title="Listings" hint={`Your trades synced, but Flipbook could not read what you have listed, so the Listed tags may be out of date. CSFloat said: ${listingsError}`}>
+            <span className="hint">Tries again on the next sync.</span>
+          </Row>
+        )}
         <Row title="Seller fee" hint="Taken off every sale. CSFloat charges 2% today; its terms allow up to 5%.">
           <label className="fee">
             <input className="search" type="number" min={0} max={50} step={0.1} defaultValue={+(feeRate * PERCENT).toFixed(2)} onBlur={onFeeChange} aria-label="Seller fee in percent" />
