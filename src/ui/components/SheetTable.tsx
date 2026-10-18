@@ -37,7 +37,8 @@ export function SheetTable({ rows, allRows, detail, sort, onSort, selection, new
   const header = { sort, onSort };
   // Holds are mostly unsold: the sale columns step aside for today's price, and a sheet of flips never shows price columns.
   const sold = allRows.some((row) => row.status !== 'open');
-  const priced = allRows.some((row) => row.quote || row.listing);
+  // A listing alone doesn't add the price columns; on sheets without them it shows in the Net column.
+  const priced = allRows.some((row) => row.quote);
   const columnCount = 7 + (detailed ? 1 : 0) + (sold ? 5 : 0) + (priced ? 3 : 0);
 
   return (

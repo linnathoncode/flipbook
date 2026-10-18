@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import { addRule, moveTrades, releaseManualMatch, type Journal } from '../app/actions';
-import { OTHER_ID, sectionSize, type Folder, type Section } from '../domain/folders';
+import { HOLDS_ID, OTHER_ID, sectionSize, type Folder, type Section } from '../domain/folders';
 import { itemKind, KIND_PLURAL } from '../domain/itemKinds';
 import { EMPTY_FILTER, filterRows, sectionRows, SORT_KEYS, sortRows, type ListFilter, type SheetRow, type Sort } from '../domain/listFilters';
 import { AnalyticsScreen } from './components/AnalyticsScreen';
@@ -51,7 +51,9 @@ export function App() {
   // Preferences saved by an older version may name columns that no longer exist.
   const storedSort = sorts[sheetKey] ?? legacySort;
   const sort = SORT_KEYS.includes(storedSort.key) ? storedSort : DEFAULT_SORT;
-  const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date(), { listed: journal.listed, prices: journal.prices }) : [];
+  // Only Holds gets priced; a price cached for the same item name would be stale anywhere else.
+  const prices = current.kind === 'folder' && current.folderId === HOLDS_ID ? journal?.prices : undefined;
+  const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date(), { listed: journal.listed, prices }) : [];
   const shown = sortRows(filterRows(rows, filter), sort);
 
   useKeyboard({
