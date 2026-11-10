@@ -1,9 +1,11 @@
 import { errorText, type PricingProgress, type SyncOptions, type SyncOutcome } from './sync';
+import type { PriceQuote } from '../domain/prices';
 
 /** Messages between the dashboard and the background worker, which owns syncing. */
 const SYNC_REQUEST = 'flipbook/sync';
 const JOURNAL_UPDATED = 'flipbook/journal-updated';
 const PRICING = 'flipbook/pricing';
+const ITEM_PRICE_REQUEST = 'flipbook/item-price';
 
 interface SyncRequest extends SyncOptions {
   type: typeof SYNC_REQUEST;
@@ -11,6 +13,7 @@ interface SyncRequest extends SyncOptions {
 
 type SyncReply = { ok: true; outcome: SyncOutcome } | { ok: false; error: string };
 type Message = { type?: string };
+type PriceReply = { ok: true; quote: PriceQuote } | { ok: false; error: string };
 
 export async function requestSync(options: SyncOptions): Promise<SyncOutcome> {
   const request: SyncRequest = { type: SYNC_REQUEST, ...options };
@@ -27,6 +30,22 @@ export function handleSyncRequests(sync: (options: SyncOptions) => Promise<SyncO
       .then((outcome) => reply({ ok: true, outcome }))
       .catch((cause: unknown) => reply({ ok: false, error: errorText(cause) }));
     return true; // Keeps the channel open for the async reply.
+  });
+}
+
+export async function requestItemPrice(name: string): Promise<PriceQuote> {
+  const reply = (await chrome.runtime.sendMessage({ type: ITEM_PRICE_REQUEST, name })) as PriceReply;
+  if (!reply.ok) throw new Error(reply.error);
+  return reply.quote;
+}
+
+export function handleItemPriceRequests(price: (name: string) => Promise<PriceQuote>): void {
+  chrome.runtime.onMessage.addListener((message: Message & { name?: string }, _sender, reply: (response: PriceReply) => void) => {
+    if (message.type !== ITEM_PRICE_REQUEST || typeof message.name !== 'string' || !message.name.trim()) return false;
+    price(message.name)
+      .then((quote) => reply({ ok: true, quote }))
+      .catch((cause: unknown) => reply({ ok: false, error: errorText(cause) }));
+    return true;
   });
 }
 

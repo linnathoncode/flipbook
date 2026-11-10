@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import { addRule, moveTrades, releaseManualMatch, type Journal } from '../app/actions';
+import { requestItemPrice } from '../app/messages';
+import { errorText } from '../app/sync';
 import { HOLDS_ID, OTHER_ID, sectionSize, type Folder, type Section } from '../domain/folders';
 import { itemKind, KIND_PLURAL } from '../domain/itemKinds';
 import { EMPTY_FILTER, filterRows, sectionRows, SORT_KEYS, sortRows, type ListFilter, type SheetRow, type Sort } from '../domain/listFilters';
@@ -37,7 +39,9 @@ export function App() {
   const [detail, setDetail] = usePreference<RowDetail>('row-detail', 'compact');
   const [storedPageSize, setStoredPageSize] = usePreference<PageSize>('page-size', 25);
   const [page, setPage] = useState(0);
-  const [menu, setMenu] = useState<{ x: number; y: number }>();
+  const [menu, setMenu] = useState<{ x: number; y: number; trigger?: HTMLButtonElement }>();
+  const [pricedFlips, setPricedFlips] = usePreference<string[]>('priced-flips', []);
+  const [pricingFlip, setPricingFlip] = useState<string>();
   const selection = useSelection();
   const { toast, show, dismiss } = useToast();
 
@@ -57,7 +61,11 @@ export function App() {
   const shown = sortRows(filterRows(rows, filter), sort);
 
   useKeyboard({
-    onEscape: () => (menu ? setMenu(undefined) : selection.clear()),
+    onEscape: () => {
+      if (!menu) return selection.clear();
+      setMenu(undefined);
+      menu.trigger?.focus();
+    },
     onSelectAll: isSheet(current) ? () => selection.setAll(shown.map(rowEntry), true) : undefined,
   });
 
@@ -147,6 +155,20 @@ export function App() {
     if (target) void move({ id: target.id, name: target.name });
   };
 
+  const priceFlip = async (row: SheetRow) => {
+    if (pricingFlip) return;
+    setPricingFlip(row.key);
+    try {
+      await requestItemPrice(row.item.marketHashName);
+      if (!pricedFlips.includes(row.key)) setPricedFlips([...pricedFlips, row.key]);
+      await refresh();
+    } catch (cause) {
+      show({ text: errorText(cause) });
+    } finally {
+      setPricingFlip(undefined);
+    }
+  };
+
   const unpair = async () => {
     const paired = selectedRows().filter((row) => row.match === 'manual' || row.match === 'tracker');
     setMenu(undefined);
@@ -199,8 +221,14 @@ export function App() {
             selection={selection}
             newSince={lastVisit}
             sync={syncProps}
-            onMoveMenu={(x, y) => setMenu(menu ? undefined : { x, y })}
-            onSendToOther={() => moveTo(OTHER_ID)}
+            onMoveMenu={(trigger) => {
+              const box = trigger.getBoundingClientRect();
+              setMenu(menu?.trigger ? undefined : { x: box.left, y: box.bottom + 4, trigger });
+            }}
+            moveMenuOpen={Boolean(menu?.trigger)}
+            flipPricing={current.kind === 'flips' ? {
+              active: pricingFlip, requested: pricedFlips, quotes: journal.prices, onPrice: (row) => void priceFlip(row),
+            } : undefined}
             onRowMenu={onRowMenu}
             onRowDrag={onRowDrag}
             onPickBuy={() => navigate({ kind: 'review' })}
@@ -244,15 +272,10 @@ export function App() {
           y={menu.y}
           count={selection.count}
           targets={menuTargets}
-          canSendToOther={currentFolderId !== OTHER_ID}
           canUnpair={selected.some((row) => row.match === 'manual' || row.match === 'tracker')}
           onMove={moveTo}
           onFolderCreated={(created: Folder) => void move({ id: created.id, name: created.name })}
           onUnpair={() => void unpair()}
-          onClear={() => {
-            selection.clear();
-            setMenu(undefined);
-          }}
           onClose={() => setMenu(undefined)}
         />
       )}

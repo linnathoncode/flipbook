@@ -1,5 +1,5 @@
-import { announceJournalUpdated, announcePricing, handleSyncRequests } from '../app/messages';
-import { isSyncStale, syncFromCsfloat, type SyncOptions, type SyncOutcome } from '../app/sync';
+import { announceJournalUpdated, announcePricing, handleItemPriceRequests, handleSyncRequests } from '../app/messages';
+import { isSyncStale, priceItemFromCsfloat, syncFromCsfloat, type SyncOptions, type SyncOutcome } from '../app/sync';
 import { CSFLOAT_ORIGIN } from '../io/csfloatSync';
 
 const DASHBOARD_URL = chrome.runtime.getURL('dashboard.html');
@@ -7,10 +7,17 @@ const SYNC_ALARM = 'flipbook/periodic-sync';
 const SYNC_INTERVAL_MINUTES = 30;
 
 let runningSync: Promise<SyncOutcome> | undefined;
+let marketWork: Promise<unknown> = Promise.resolve();
+
+function queueMarketWork<T>(run: () => Promise<T>): Promise<T> {
+  const task = marketWork.then(run);
+  marketWork = task.catch(() => undefined);
+  return task;
+}
 
 /** One sync at a time, however many triggers fire together. */
 function sync(options: SyncOptions): Promise<SyncOutcome> {
-  runningSync ??= syncFromCsfloat(options, announcePricing)
+  runningSync ??= queueMarketWork(() => syncFromCsfloat(options, announcePricing))
     .then((outcome) => {
       if (outcome.status === 'synced') announceJournalUpdated();
       return outcome;
@@ -29,6 +36,7 @@ async function syncIfStale(): Promise<void> {
 }
 
 handleSyncRequests(sync);
+handleItemPriceRequests((name) => queueMarketWork(() => priceItemFromCsfloat(name)));
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.alarms.create(SYNC_ALARM, { periodInMinutes: SYNC_INTERVAL_MINUTES });

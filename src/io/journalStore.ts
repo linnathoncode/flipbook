@@ -7,6 +7,7 @@ import { DEFAULT_FEE_RATE } from '../domain/profit';
 
 export interface Settings {
   ownerSteamId?: string;
+  ownerSteamIdVerified?: boolean;
   feeRate: number;
   lastSyncAt?: string;
   /** Why the most recent sync failed; cleared by the next success. */
@@ -70,9 +71,13 @@ export async function loadTrades(): Promise<Trade[]> {
 }
 
 /** Inserts or replaces by trade id, so re-importing the same data never duplicates it. */
-export async function saveTrades(trades: Trade[]): Promise<void> {
+export async function saveTrades(trades: Trade[], removedIds: string[]): Promise<void> {
   const tx = (await db()).transaction('trades', 'readwrite');
-  await Promise.all([...trades.map((trade) => tx.store.put(trade)), tx.done]);
+  await Promise.all([
+    ...removedIds.map((id) => tx.store.delete(id)),
+    ...trades.map((trade) => tx.store.put(trade)),
+    tx.done,
+  ]);
 }
 
 export async function loadLockedMatches(): Promise<Match[]> {

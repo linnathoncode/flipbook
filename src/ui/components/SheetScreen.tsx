@@ -6,7 +6,7 @@ import { clearChips, EMPTY_FILTER, isNarrowed, isUnfiltered, pickResult, toggleE
 import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
 import type { Selection } from '../useSelection';
 import { PageTurner } from './PageTurner';
-import { SheetTable, type RowDetail } from './SheetTable';
+import { SheetTable, type FlipPricing, type RowDetail } from './SheetTable';
 import { Kpi } from './shared';
 import { TitleBar, type SyncProps } from './TitleBar';
 
@@ -49,8 +49,9 @@ interface Props {
   selection: Selection;
   newSince?: string;
   sync: SyncProps;
-  onMoveMenu: (x: number, y: number) => void;
-  onSendToOther: () => void;
+  onMoveMenu: (trigger: HTMLButtonElement) => void;
+  moveMenuOpen: boolean;
+  flipPricing?: FlipPricing;
   onRowMenu: (event: MouseEvent, row: SheetRow) => void;
   onRowDrag: (event: DragEvent, row: SheetRow) => void;
   onPickBuy: () => void;
@@ -58,21 +59,21 @@ interface Props {
   onChange: () => void;
 }
 
-export function SheetScreen({ folder, rows, shown, view, selection, newSince, sync, onMoveMenu, onSendToOther, onRowMenu, onRowDrag, onPickBuy, onFolderDeleted, onChange }: Props) {
+export function SheetScreen({ folder, rows, shown, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag, onPickBuy, onFolderDeleted, onChange }: Props) {
   const pageCount = view.pageSize === 'all' ? 1 : Math.max(1, Math.ceil(shown.length / view.pageSize));
   const page = Math.min(view.page, pageCount - 1);
   const pageRows = view.pageSize === 'all' ? shown : shown.slice(page * view.pageSize, (page + 1) * view.pageSize);
   const filtered = !isUnfiltered(view.filter);
 
   return (
-    <>
+    <div className="sheet-workspace">
       <header className="top">
         <FolderTitle folder={folder} rowCount={rows.length} sync={sync} onChange={onChange} onDeleted={onFolderDeleted} />
         <SheetNote folder={folder} />
         <div className="kpis"><SheetKpis folder={folder} rows={rows} sync={sync} /></div>
       </header>
       {selection.count > 0 ? (
-        <SelectionBar count={selection.count} inOther={folder?.id === OTHER_ID} onMoveMenu={onMoveMenu} onSendToOther={onSendToOther} onClear={selection.clear} />
+        <SelectionBar count={selection.count} onMoveMenu={onMoveMenu} moveMenuOpen={moveMenuOpen} onClear={selection.clear} />
       ) : (
         <Toolbar view={view} shown={shown.length} total={rows.length} />
       )}
@@ -82,10 +83,12 @@ export function SheetScreen({ folder, rows, shown, view, selection, newSince, sy
           rows={pageRows}
           allRows={shown}
           detail={view.detail}
+          showMarketPrices={folder?.id === HOLDS_ID}
           sort={view.sort}
           onSort={view.setSort}
           selection={selection}
           newSince={newSince}
+          flipPricing={flipPricing}
           empty={
             filtered ? (
               <>No rows match. <button className="btn ghost" onClick={() => view.setFilter(EMPTY_FILTER)}>Clear search and filters</button></>
@@ -99,7 +102,7 @@ export function SheetScreen({ folder, rows, shown, view, selection, newSince, sy
         />
       </div>
       {shown.length > SMALLEST_PAGE && <Pager view={view} page={page} pageCount={pageCount} total={shown.length} />}
-    </>
+    </div>
   );
 }
 
@@ -260,6 +263,43 @@ function FolderTitle({ folder, rowCount, sync, onChange, onDeleted }: FolderTitl
   );
 }
 
+const SHEET_SORTS: Record<Sort['key'], string> = {
+  bought: 'Bought date',
+  name: 'Item name',
+  buyPrice: 'Buy price',
+  sellPrice: 'Sell price',
+  net: 'Net profit',
+  percent: 'Profit %',
+  sold: 'Sold date',
+  held: 'Time held',
+  float: 'Float',
+  adjusted: 'Adjusted float',
+  nowPrice: 'Price now',
+  nowNet: 'Profit if sold now',
+  nowPercent: 'Profit % if sold now',
+};
+const SORT_OPTIONS = Object.entries(SHEET_SORTS) as [Sort['key'], string][];
+
+function SheetSort({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void }) {
+  const reverseLabel = sort.descending ? 'Sort ascending' : 'Sort descending';
+  return (
+    <div className="sheet-sort">
+      <label>
+        <span>Sort by</span>
+        <select className="btn" value={sort.key} onChange={(event) => {
+          const option = SORT_OPTIONS.find(([key]) => key === event.target.value);
+          if (option) onSort({ key: option[0], descending: option[0] !== 'name' });
+        }}>
+          {SORT_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </select>
+      </label>
+      <button className="btn sq" aria-label={reverseLabel} title={reverseLabel} onClick={() => onSort({ ...sort, descending: !sort.descending })}>
+        {sort.descending ? '↓' : '↑'}
+      </button>
+    </div>
+  );
+}
+
 function Toolbar({ view, shown, total }: { view: SheetView; shown: number; total: number }) {
   const { kinds, result, excludedKinds, excludedResults } = view.filter;
   const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
@@ -277,6 +317,7 @@ function Toolbar({ view, shown, total }: { view: SheetView; shown: number; total
       <button className="btn" aria-expanded={view.filtersOpen} aria-controls="filters" onClick={view.toggleFilters}>
         Filters{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
       </button>
+      <SheetSort sort={view.sort} onSort={view.setSort} />
       <span className="count" aria-live="polite">{shown === total ? plural(total, 'row') : `${shown} of ${plural(total, 'row')}`}</span>
       <div className="tb-end">
         <div className="seg" role="group" aria-label="Row detail">
@@ -290,24 +331,17 @@ function Toolbar({ view, shown, total }: { view: SheetView; shown: number; total
 
 interface SelectionBarProps {
   count: number;
-  inOther: boolean;
-  onMoveMenu: (x: number, y: number) => void;
-  onSendToOther: () => void;
+  onMoveMenu: (trigger: HTMLButtonElement) => void;
+  moveMenuOpen: boolean;
   onClear: () => void;
 }
 
-function SelectionBar({ count, inOther, onMoveMenu, onSendToOther, onClear }: SelectionBarProps) {
-  const openMenu = (event: MouseEvent<HTMLButtonElement>) => {
-    const box = event.currentTarget.getBoundingClientRect();
-    onMoveMenu(box.left, box.bottom + 4);
-  };
+function SelectionBar({ count, onMoveMenu, moveMenuOpen, onClear }: SelectionBarProps) {
   return (
     <div className="toolbar selbar" role="region" aria-label="Selected rows">
       <strong>{count} selected</strong>
-      <button className="btn pri" aria-haspopup="menu" onClick={openMenu}>Move to ▾</button>
-      {!inOther && <button className="btn" onClick={onSendToOther}>Not a flip</button>}
-      <span className="hint">You can also drag rows onto a folder, or right-click.</span>
-      <div className="tb-end"><button className="btn ghost" onClick={onClear}>Clear</button></div>
+      <button className="btn pri" aria-haspopup="menu" aria-expanded={moveMenuOpen} onClick={(event) => onMoveMenu(event.currentTarget)}>Move to <span aria-hidden="true">▾</span></button>
+      <button className="btn ghost" onClick={onClear}>Clear selection</button>
     </div>
   );
 }

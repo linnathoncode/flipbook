@@ -55,21 +55,23 @@ you create them, and anything you move by hand stays where you put it. Settings 
 
 More things you can do:
 
-- **Select rows** like a spreadsheet: click a row, Ctrl-click (Cmd on a Mac) to add more, Shift-click for a range,
-  Ctrl+A for every row in view, Escape to clear.
-- **Compact / Detailed** switches the table. Detailed shows the item image, pattern seed, fade %, stickers and charms,
-  and the float on a wear bar with the skin's float cap hatched out.
+- **Open trade details** by clicking a row or its arrow. Adjusted float, pattern, stickers, sale date, and match details
+  appear below it. **Detailed** adds item images and a wear bar to the table.
+- **Select rows** by holding the first row, then clicking more rows. The checkboxes, Ctrl-click (Cmd on a Mac),
+  Shift-click for a range, Ctrl+A for every row in view, and Escape to clear also work.
 - **Adj. float** is where the float sits inside that skin's own range: (float − min) / (max − min). Trade-ups use this now.
 - **Listed** shows in place of Open when an item is up for sale on CSFloat, with your asking price.
   Hover it to see what you'd net if it sells there. Listings refresh with every sync.
+- **Listings** opens matching buy-now listings on CSFloat. On an unsold Flip, **Price item** shows the cheapest
+  listing in the row as an estimate, separate from your realized profit.
 - **Worth now** on Holds prices each held item at its cheapest CSFloat listing, and **If sold now** is what that nets
   after the fee. Prices are cached: 6 hours, or 1 hour for items over $100. **Refresh prices** skips anything priced in
   the last 5 minutes, and if CSFloat rate-limits the lookups, Flipbook waits 30 minutes before asking again.
   While prices come in, a small book turns one page per price and each row fills in as its price lands.
-  Sheets with priced items get Now, If sold and % columns you can sort by. The sale columns only show once something
-  on the sheet has sold.
+  The Holds table shows sortable **Now** and **If sold now** columns.
 - **Filters** narrows by item type and result (open, listed, wins, losses). Right-click a filter to hide that type or
-  result instead; it turns red. Click a column header to sort. Each sheet remembers its own sort.
+  result instead; it turns red. Click a column header or use **Sort by**, which also lists fields in the trade details.
+  Each sheet remembers its own sort.
 - **Rows per page** sets the page size (25, 50, 100 or all).
 - **Needs review** lists sales that could have come from more than one buy. Pick the right one and it's paired for good.
 - **Analytics** charts your net profit over time, by month and by item type, with your best and worst flips.
@@ -78,7 +80,7 @@ More things you can do:
 - **Settings** changes the seller fee (2% by default).
 - The sun/moon button switches between light and dark.
 
-### What the Match column means
+### What Match means in the trade details
 
 | Tag | Meaning |
 |---|---|
@@ -86,7 +88,8 @@ More things you can do:
 | FIFO | Stickers, cases and other items without a float are paired oldest buy first |
 | Check | Only one earlier buy has the same name. Probably right, but worth a look |
 | Manual | You picked the buy in Needs review |
-| Pick buy | More than one buy could be the one. Click it to choose |
+| Awaiting sale | The item is still open and has no sale to match |
+| Pick buy | More than one buy could be the one. Choose in Needs review |
 | No buy | No buy on record, usually bought outside CSFloat |
 
 ## Update
@@ -105,7 +108,7 @@ Then click the reload arrow on Flipbook in `chrome://extensions`. Your data is k
   Any error shows at the top of Flipbook.
 - **A sale isn't paired:** it was probably bought outside CSFloat, or before your CSFloat history starts. It'll be in **Other**.
   If it was a real flip, move it back to Flips.
-- **No stickers or charms in Detailed view:** they come in with the next sync.
+- **No stickers or charms in the trade details:** they come in with the next sync.
 - **The extension shows an error in `chrome://extensions`:** run `npm run build` again and reload it.
 
 ## Your data

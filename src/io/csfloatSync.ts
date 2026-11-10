@@ -10,6 +10,7 @@ const MAX_PAGES = 100;
 
 /** Requests made through the user's logged-in CSFloat tab. */
 export interface CsfloatSession {
+  steamId(): Promise<string>;
   /** The full trade history. */
   trades(): Promise<CsfloatTrade[]>;
   /** What the account has listed right now, as CSFloat sent it. */
@@ -47,6 +48,7 @@ export async function withCsfloatSession<T>(
 
   try {
     return await use({
+      steamId: () => run(fetchSteamIdInPage, []),
       trades: () => run(fetchTradePagesInPage, [PAGE_SIZE, MAX_PAGES]),
       listings: (steamId) => run(fetchListingPagesInPage, [steamId, LISTINGS_PAGE_SIZE, MAX_PAGES]),
       cheapestListing: (name) => run(fetchCheapestListingInPage, [name]),
@@ -57,6 +59,21 @@ export async function withCsfloatSession<T>(
 }
 
 type PageResult<T> = { value: T } | { error: string };
+
+async function fetchSteamIdInPage(): Promise<PageResult<string>> {
+  const response = await fetch('/api/v1/me', { credentials: 'include' });
+  if (response.status === 401 || response.status === 403) {
+    return { error: 'Not logged in to CSFloat. Log in at csfloat.com and sync again.' };
+  }
+  if (!response.ok) return { error: `CSFloat returned HTTP ${response.status} for your profile.` };
+
+  const body = (await response.json()) as { user?: { steam_id?: unknown } } | null;
+  const steamId = body?.user?.steam_id;
+  if (typeof steamId !== 'string' || !/^\d{17}$/.test(steamId)) {
+    return { error: 'Could not read the Steam account from your CSFloat profile. Check that you are logged in and sync again.' };
+  }
+  return { value: steamId };
+}
 
 /** Runs in the csfloat.com page context. Must stay self-contained: no imports or closures. */
 async function fetchTradePagesInPage(pageSize: number, maxPages: number): Promise<PageResult<CsfloatTrade[]>> {

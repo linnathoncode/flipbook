@@ -1,7 +1,7 @@
-import { detectOwnerSteamId, normalizeCsfloatTrades, type CsfloatTrade } from '../domain/csfloatTrades';
+import { normalizeCsfloatTrades, type CsfloatTrade } from '../domain/csfloatTrades';
 import { HOLDS_ID } from '../domain/folders';
 import { listingsInResponse, normalizeCsfloatListings } from '../domain/listings';
-import { duePriceNames, PRICE_KEEP_MS, quoteFromResponse, RATE_LIMIT_PAUSE_MS } from '../domain/prices';
+import { duePriceNames, PRICE_KEEP_MS, quoteFromResponse, RATE_LIMIT_PAUSE_MS, type PriceQuote } from '../domain/prices';
 import { loadJournal } from './actions';
 import { PRICE_REQUEST_GAP_MS, withCsfloatSession, type CsfloatSession } from '../io/csfloatSync';
 import { loadPrices, loadSettings, loadTrades, replaceListings, savePrices, saveSettings, saveTrades } from '../io/journalStore';
@@ -34,8 +34,9 @@ export async function syncFromCsfloat(
 ): Promise<SyncOutcome> {
   try {
     const summary = await withCsfloatSession({ openTabIfNeeded }, async (session) => {
-      const stored = await storeCsfloatTrades(await session.trades());
-      await syncListings(session);
+      const ownerSteamId = await session.steamId();
+      const stored = await storeCsfloatTrades(await session.trades(), ownerSteamId);
+      await syncListings(session, ownerSteamId);
       // Prices are a nice-to-have; each one shows its age, so a missed refresh is visible.
       await refreshHeldPrices(session, forcePrices, onPricing).catch(() => undefined);
       return stored;
@@ -54,15 +55,26 @@ export async function isSyncStale(now = Date.now()): Promise<boolean> {
   return !lastSyncAt || now - Date.parse(lastSyncAt) > STALE_AFTER_MS;
 }
 
-export async function storeCsfloatTrades(raw: CsfloatTrade[]): Promise<ImportSummary> {
+async function storeCsfloatTrades(raw: CsfloatTrade[], ownerSteamId: string): Promise<ImportSummary> {
   const settings = await loadSettings();
-  const ownerSteamId = settings.ownerSteamId ?? detectOwnerSteamId(raw);
-  if (!ownerSteamId) throw new Error('Could not tell which Steam account these trades belong to.');
-  if (!settings.ownerSteamId) await saveSettings({ ...settings, ownerSteamId });
-
-  const existingIds = new Set((await loadTrades()).map((trade) => trade.id));
+  const existing = await loadTrades();
   const trades = normalizeCsfloatTrades(raw, ownerSteamId);
-  await saveTrades(trades);
+  const removedIds = raw
+    .filter((trade) => trade.state === 'cancelled' || trade.state === 'failed')
+    .filter((trade) => trade.buyer_id === ownerSteamId || trade.seller_id === ownerSteamId)
+    .map((trade) => trade.id);
+  if (settings.ownerSteamId && settings.ownerSteamId !== ownerSteamId) {
+    const refreshedIds = new Set([...trades.map((trade) => trade.id), ...removedIds]);
+    // A legacy owner was guessed from trades. Correct it only if every old CSFloat row can be reconciled.
+    if (settings.ownerSteamIdVerified || existing.some((trade) => trade.source === 'csfloat' && !refreshedIds.has(trade.id))) {
+      throw new Error('This journal belongs to a different Steam account. Sign back in to that account on CSFloat and sync again.');
+    }
+  }
+  await saveTrades(trades, removedIds);
+  if (!settings.ownerSteamIdVerified) {
+    await saveSettings({ ...(await loadSettings()), ownerSteamId, ownerSteamIdVerified: true });
+  }
+  const existingIds = new Set(existing.map((trade) => trade.id));
   return { added: trades.filter((trade) => !existingIds.has(trade.id)).length, total: trades.length };
 }
 
@@ -70,9 +82,7 @@ export async function storeCsfloatTrades(raw: CsfloatTrade[]): Promise<ImportSum
  * Listings are extra: if CSFloat won't give them, the trades still count as synced,
  * the last good snapshot stays, and Settings says what went wrong.
  */
-async function syncListings(session: CsfloatSession): Promise<void> {
-  const { ownerSteamId } = await loadSettings();
-  if (!ownerSteamId) return;
+async function syncListings(session: CsfloatSession, ownerSteamId: string): Promise<void> {
   let listingsError: string | undefined;
   try {
     await replaceListings(normalizeCsfloatListings(listingsInResponse(await session.listings(ownerSteamId))));
@@ -80,6 +90,34 @@ async function syncListings(session: CsfloatSession): Promise<void> {
     listingsError = errorText(cause);
   }
   await saveSettings({ ...(await loadSettings()), listingsError });
+}
+
+export async function priceItemFromCsfloat(name: string): Promise<PriceQuote> {
+  const now = new Date();
+  const quotes = await loadPrices();
+  if (duePriceNames([name], quotes, now, true).length === 0) return quotes.get(name)!;
+  const { pricesPausedUntil } = await loadSettings();
+  if (pricesPausedUntil && Date.parse(pricesPausedUntil) > now.getTime()) {
+    throw new Error('CSFloat paused price lookups. Try again in a little while.');
+  }
+
+  const keepAfter = new Date(now.getTime() - PRICE_KEEP_MS).toISOString();
+  const result = await withCsfloatSession({ openTabIfNeeded: true }, (session) => lookupPrice(session, name, keepAfter));
+  if (result === 'rateLimited') throw new Error('CSFloat paused price lookups for 30 minutes.');
+  if (!result || result === 'failed') throw new Error('Could not get a price from CSFloat. Try again.');
+  return result;
+}
+
+async function lookupPrice(session: CsfloatSession, name: string, keepAfter: string): Promise<PriceQuote | 'rateLimited' | 'failed'> {
+  const answer = await session.cheapestListing(name);
+  if ('rateLimited' in answer) {
+    await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
+    return 'rateLimited';
+  }
+  if ('failed' in answer) return 'failed';
+  const quote = quoteFromResponse(name, answer.body, new Date().toISOString());
+  await savePrices([quote], keepAfter);
+  return quote;
 }
 
 /**
@@ -103,12 +141,7 @@ async function refreshHeldPrices(session: CsfloatSession, force: boolean, onPric
   try {
     for (const [index, name] of due.entries()) {
       if (index > 0) await new Promise((resolve) => setTimeout(resolve, PRICE_REQUEST_GAP_MS));
-      const answer = await session.cheapestListing(name);
-      if ('rateLimited' in answer) {
-        await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
-        return;
-      }
-      if ('body' in answer) await savePrices([quoteFromResponse(name, answer.body, new Date().toISOString())], keepAfter);
+      if (await lookupPrice(session, name, keepAfter) === 'rateLimited') return;
       onPricing({ done: index + 1, total });
     }
   } finally {

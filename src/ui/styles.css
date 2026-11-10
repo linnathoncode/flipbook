@@ -357,6 +357,10 @@ input {
   background: color-mix(in srgb, var(--accent) 6%, var(--bg));
 }
 
+.selbar strong {
+  margin-inline-end: 4px;
+}
+
 .search {
   height: 30px;
   width: 220px;
@@ -524,6 +528,14 @@ input {
 
 /* ---------- Sheet ---------- */
 
+.sheet-workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
 /* The table scrolls on its own, so the header and totals above and below stay in view. */
 .tablewrap {
   position: relative;
@@ -544,14 +556,9 @@ input {
 
 .sheet {
   width: 100%;
-  min-width: 860px;
   border-collapse: separate;
   border-spacing: 0;
   font-variant-numeric: tabular-nums;
-}
-
-.fb[data-rows='detailed'] .sheet {
-  min-width: 1120px;
 }
 
 .sheet th {
@@ -595,6 +602,7 @@ input {
 }
 
 .sheet th.n {
+  width: 8%;
   font-family: inherit;
   font-size: 12px;
 }
@@ -619,7 +627,7 @@ input {
 }
 
 .row {
-  cursor: default;
+  cursor: pointer;
 }
 
 .row:hover td {
@@ -628,6 +636,83 @@ input {
 
 .row.sel td {
   background-color: var(--sel);
+}
+
+.row.expanded:not(.sel) td {
+  background-color: var(--hover);
+}
+
+.sheet-sort,
+.sheet-sort label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sheet-sort label > span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.sheet-sort select {
+  max-width: 168px;
+}
+
+.item-with-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.row-disclosure {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.row-disclosure span {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.row-disclosure[aria-expanded='true'] span {
+  transform: rotate(90deg);
+}
+
+.row-disclosure:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+.sheet .trade-detail-row td {
+  padding: 12px 20px 14px;
+  background: var(--side);
+  white-space: normal;
+}
+
+.trade-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, max-content));
+  gap: 10px 24px;
+  margin: 0;
+}
+
+.trade-details dt {
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.trade-details dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* A green or red edge on every closed flip. */
@@ -671,6 +756,41 @@ thead:hover .chk input {
 }
 
 /* ---------- Item cell ---------- */
+
+.market-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  border-inline-start: 1px solid var(--rule);
+  padding-inline-start: 8px;
+}
+
+.market-link {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.market-link:hover,
+.market-link:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.market-actions .market-price {
+  height: 23px;
+  padding-inline: 7px;
+}
+
+.item-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  max-width: 32rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 .itm {
   display: flex;
@@ -987,9 +1107,11 @@ thead:hover .chk input {
 .menu {
   position: fixed;
   z-index: 30;
-  min-width: 214px;
+  width: min(200px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
   display: flex;
   flex-direction: column;
+  overflow: auto;
   padding: 5px;
   background: var(--bg);
   border: 1px solid var(--rule);
@@ -1003,13 +1125,18 @@ thead:hover .chk input {
   color: var(--muted);
 }
 
+.menu > * {
+  flex-shrink: 0;
+}
+
 .menu button {
   all: unset;
-  display: flex;
-  align-items: center;
+  display: block;
+  flex-shrink: 0;
   padding: 7px 9px;
   border-radius: calc(var(--radius) * 0.7);
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .menu button:hover,

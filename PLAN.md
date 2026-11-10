@@ -45,7 +45,7 @@ Permissions: `storage`, `scripting`, `tabs`, host `https://csfloat.com/*`.
 - `Settings`: `steamId`, `feeRate` (default 0.02), folder `rules`, `orphansToOther`.
 - `Folder` + `Placement`: user folders and trade id → folder id.
 
-Side is derived from `buyer_id`/`seller_id` vs the user's Steam ID (auto-detected as the ID that appears in every trade).
+Side is derived from `buyer_id`/`seller_id` vs the signed-in user's Steam ID from `/api/v1/me`.
 
 ## Matching
 
