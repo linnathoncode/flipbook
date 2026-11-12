@@ -1,3 +1,31 @@
+import type { Item } from './types';
+
+export interface InstantSellQuote {
+  priceCents?: number;
+  status: 'matched' | 'unavailable';
+  fetchedAt: string;
+}
+
+export function itemPriceKey(item: Item): string {
+  return JSON.stringify([
+    item.marketHashName, item.defIndex, item.paintIndex, item.floatValue, item.paintSeed,
+    item.stickers?.map(({ name, slot, wear }) => [name, slot, wear]),
+    item.charms?.map(({ name, pattern }) => [name, pattern]),
+    item.floatValue === undefined ? item.assetId ?? item.inspectLink : undefined,
+  ]);
+}
+
+export function highestBuyOrder(body: unknown): number | undefined {
+  const orders = Array.isArray(body) ? body : (body as { data?: unknown } | null)?.data;
+  if (!Array.isArray(orders)) throw new Error('Unrecognized CSFloat buy-order response.');
+  const prices = orders.flatMap((order) => {
+    if (!order || typeof order !== 'object') return [];
+    const { price, qty } = order as { price?: unknown; qty?: unknown };
+    return typeof price === 'number' && Number.isSafeInteger(price) && price > 0 && (qty === undefined || typeof qty === 'number' && qty > 0) ? [price] : [];
+  });
+  return prices.length ? Math.max(...prices) : undefined;
+}
+
 /** What an item sells for on CSFloat right now, as of `fetchedAt`. Keyed by market hash name. */
 export interface PriceQuote {
   name: string;
@@ -6,6 +34,7 @@ export interface PriceQuote {
   /** CSFloat's own estimate for the item, when it gives one. */
   estimateCents?: number;
   fetchedAt: string;
+  instantSell?: Record<string, InstantSellQuote>;
 }
 
 const MINUTE_MS = 60 * 1000;

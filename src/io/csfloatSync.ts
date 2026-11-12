@@ -1,4 +1,5 @@
 import type { CsfloatTrade, CsfloatTradesPage } from '../domain/csfloatTrades';
+import type { Item } from '../domain/types';
 
 export const CSFLOAT_ORIGIN = 'https://csfloat.com';
 const PAGE_SIZE = 100;
@@ -17,6 +18,7 @@ export interface CsfloatSession {
   listings(steamId: string): Promise<unknown[]>;
   /** The cheapest buy-now listing for one item. Callers space these out; see PRICE_REQUEST_GAP_MS. */
   cheapestListing(name: string): Promise<CheapestListing>;
+  matchingBuyOrders(item: Item, listingId?: string): Promise<CheapestListing>;
 }
 
 /** CSFloat's raw answer, or that it asked us to slow down, or that this one request failed. */
@@ -39,7 +41,8 @@ export async function withCsfloatSession<T>(
     existingTabId === undefined ? await openCsfloatTab() : { tabId: existingTabId, openedByUs: false };
 
   const run = async <R>(func: (...args: never[]) => Promise<PageResult<R>>, args: unknown[]): Promise<R> => {
-    const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: func as () => Promise<PageResult<R>>, args: args as [] });
+    const serializedArgs = JSON.parse(JSON.stringify(args)) as [];
+    const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: func as () => Promise<PageResult<R>>, args: serializedArgs });
     const result = injection?.result as PageResult<R> | undefined;
     if (!result) throw new Error('CSFloat tab did not return a result.');
     if ('error' in result) throw new Error(result.error);
@@ -47,11 +50,21 @@ export async function withCsfloatSession<T>(
   };
 
   try {
+    let inventory: Promise<CheapestListing> | undefined;
     return await use({
       steamId: () => run(fetchSteamIdInPage, []),
       trades: () => run(fetchTradePagesInPage, [PAGE_SIZE, MAX_PAGES]),
       listings: (steamId) => run(fetchListingPagesInPage, [steamId, LISTINGS_PAGE_SIZE, MAX_PAGES]),
       cheapestListing: (name) => run(fetchCheapestListingInPage, [name]),
+      matchingBuyOrders: async (item, listingId) => {
+        if (listingId) return run(fetchMatchingBuyOrdersInPage, [item, listingId, undefined]);
+        if (item.inspectLink && item.inspectSignature) return run(fetchMatchingBuyOrdersInPage, [item, undefined, undefined]);
+        inventory ??= run(fetchInventoryInPage, []);
+        const answer = await inventory;
+        if (!('body' in answer)) return answer;
+        await new Promise((resolve) => setTimeout(resolve, PRICE_REQUEST_GAP_MS));
+        return run(fetchMatchingBuyOrdersInPage, [item, undefined, answer.body]);
+      },
     });
   } finally {
     if (openedByUs) await chrome.tabs.remove(tabId);
@@ -126,6 +139,35 @@ async function fetchCheapestListingInPage(name: string): Promise<PageResult<Chea
   if (response.status === 401 || response.status === 403) {
     return { error: 'Not logged in to CSFloat. Log in at csfloat.com and sync again.' };
   }
+  return { value: response.ok ? { body: await response.json() } : { failed: true } };
+}
+
+async function fetchInventoryInPage(): Promise<PageResult<CheapestListing>> {
+  const response = await fetch('/api/v1/me/inventory', { credentials: 'include' });
+  if (response.status === 429) return { value: { rateLimited: true } };
+  return { value: response.ok ? { body: await response.json() } : { failed: true } };
+}
+
+async function fetchMatchingBuyOrdersInPage(item: Item, listingId?: string, inventory?: unknown): Promise<PageResult<CheapestListing>> {
+  let url: string;
+  if (listingId) {
+    url = `/api/v1/listings/${encodeURIComponent(listingId)}/buy-orders?limit=1&exclude_own=true`;
+  } else {
+    const candidates = Array.isArray(inventory) ? inventory : [];
+    const current = candidates.find((candidate) => {
+      if (candidate.market_hash_name !== item.marketHashName) return false;
+      if (item.assetId && candidate.asset_id === item.assetId) return true;
+      return item.floatValue !== undefined && candidate.float_value === item.floatValue &&
+        candidate.paint_seed === item.paintSeed && candidate.paint_index === item.paintIndex;
+    });
+    const inspect = current?.serialized_inspect ?? current?.inspect_link ?? item.inspectLink;
+    const signature = current?.gs_sig ?? item.inspectSignature;
+    if (!inspect || !signature) return { value: { failed: true } };
+    const params = new URLSearchParams({ url: inspect, market_hash_name: item.marketHashName, sig: signature, limit: '1', exclude_own: 'true' });
+    url = `/api/v1/buy-orders/item?${params}`;
+  }
+  const response = await fetch(url, { credentials: 'include' });
+  if (response.status === 429) return { value: { rateLimited: true } };
   return { value: response.ok ? { body: await response.json() } : { failed: true } };
 }
 

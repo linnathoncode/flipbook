@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import { adjustedFloat, floatRange, type FloatRange } from '../../domain/floatRanges';
 import { totalRows, type ListedFor, type PricedAt, type SheetRow, type Sort } from '../../domain/listFilters';
-import type { PriceQuote } from '../../domain/prices';
+import { itemPriceKey, type PriceQuote } from '../../domain/prices';
 import { centsToDollars } from '../../domain/profit';
 import type { Item } from '../../domain/types';
 import { CSFLOAT_ORIGIN } from '../../io/csfloatSync';
@@ -48,6 +48,11 @@ const isControl = (target: EventTarget) => target instanceof Element && Boolean(
 
 export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSort, selection, newSince, flipPricing, empty, onRowMenu, onRowDrag, onPickBuy }: Props) {
   const detailed = detail === 'detailed';
+  const [lastDateKey, setLastDateKey] = useState<'bought' | 'sold'>('bought');
+  const dateKey = sort.key === 'bought' || sort.key === 'sold' ? sort.key : lastDateKey;
+  useEffect(() => {
+    if (sort.key === 'bought' || sort.key === 'sold') setLastDateKey(sort.key);
+  }, [sort.key]);
   const [expandedKey, setExpandedKey] = useState<string>();
   const detailsId = useId();
   const hold = useRef<{ pointer: number; x: number; y: number; timer: ReturnType<typeof setTimeout> }>();
@@ -106,13 +111,24 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
       <thead>
         <tr>
           <th className="chk"><PageCheck visible={visible} selection={selection} /></th>
-          <SortHeader label="Bought" sortKey="bought" numeric {...header} />
+          <th className="n" scope="col" aria-sort={sort.key === dateKey ? (sort.descending ? 'descending' : 'ascending') : undefined}>
+            <div className="date-column-switch" role="group" aria-label="Date column">
+              {(['bought', 'sold'] as const).map((key) => (
+                <button key={key} aria-pressed={dateKey === key}
+                  title={`Show and sort by ${key} date${sort.key === key ? (sort.descending ? ', oldest first' : ', newest first') : ', newest first'}`}
+                  onClick={() => onSort({ key, descending: sort.key === key ? !sort.descending : true })}>
+                  {key === 'bought' ? 'Bought' : 'Sold'}
+                  {sort.key === key && (sort.descending ? ' ↓' : ' ↑')}
+                </button>
+              ))}
+            </div>
+          </th>
           <SortHeader label="Item" sortKey="name" {...header} />
           <SortHeader label="Float" sortKey="float" numeric {...header} />
           <SortHeader label="Buy" sortKey="buyPrice" numeric {...header} />
           {showMarketPrices && (
             <>
-              <SortHeader label="Now" sortKey="nowPrice" numeric title="The cheapest CSFloat listing for this item" {...header} />
+              <SortHeader label="Market prices" sortKey="nowPrice" numeric title="Sort by lowest CSFloat listing price" {...header} />
               <SortHeader label="If sold now" sortKey="nowNet" numeric title="Estimated profit at that price after fees" {...header} />
             </>
           )}
@@ -180,21 +196,24 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
                 <td className="chk">
                   <input type="checkbox" checked={selected} onChange={() => selection.click(entry, { add: true, range: false }, visible)} aria-label={`Select ${row.item.marketHashName}`} />
                 </td>
-                <td className="n m">{formatDate(row.boughtAt)}</td>
+                <td className="n m">{formatDate(dateKey === 'bought' ? row.boughtAt : row.soldAt) || (
+                  <span aria-label={dateKey === 'sold' ? 'Not sold' : 'No buy on record'} title={dateKey === 'sold' ? 'Not sold' : 'No buy on record'}>—</span>
+                )}</td>
                 <td>
                   <div className="item-with-disclosure">
                     <button className="row-disclosure" aria-label={`Details for ${row.item.marketHashName}`} aria-expanded={expanded}
                       aria-controls={expanded ? detailsId : undefined} onClick={() => toggleDetails(row.key)}>
                       <span aria-hidden="true">›</span>
                     </button>
-                    <ItemCell row={row} detailed={detailed} isNew={isNew} pricing={row.status === 'open' ? flipPricing : undefined} />
+                    <ItemCell row={row} detailed={detailed} isNew={isNew} pricing={row.status === 'open' && !showMarketPrices ? flipPricing : undefined} />
                   </div>
                 </td>
                 <td className="n m"><FloatCell item={row.item} detailed={detailed} /></td>
                 <td className="n">{formatMoney(row.buyPrice)}</td>
                 {showMarketPrices && (
                   <>
-                    <td className="n">{row.quote && <Estimate quote={row.quote}>{formatMoney(row.quote.price)}</Estimate>}</td>
+                    <td className="n">{row.status === 'open' && <MarketPrices item={row.item} quote={row.marketQuote}
+                      onCheck={flipPricing && (() => flipPricing.onPrice(row))} busy={flipPricing?.active === row.key} disabled={flipPricing?.active !== undefined} />}</td>
                     <td className="n pl">
                       {row.quote && <Estimate quote={row.quote} signed={row.quote.net}>{formatSignedMoney(row.quote.net)}</Estimate>}
                     </td>
@@ -259,8 +278,7 @@ function MarketActions({ row, pricing }: { row: SheetRow; pricing?: FlipPricing 
   const href = `${CSFLOAT_ORIGIN}/search?market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price&type=buy_now`;
   const quote = pricing?.requested.includes(row.key) ? pricing.quotes.get(name) : undefined;
   const busy = pricing?.active === row.key;
-  const priceText = quote?.priceCents === undefined ? 'No listings' : `Est. ${formatMoney(centsToDollars(quote.priceCents))}`;
-  const priceHint = quote && `${quote.priceCents === undefined ? 'No buy-now listings' : 'Lowest buy-now listing'}, checked ${formatTimeAgo(quote.fetchedAt)}. Click to refresh.`;
+  const priceHint = quote && `Checked ${formatTimeAgo(quote.fetchedAt)}. Click to refresh.`;
   return (
     <span className="market-actions">
       <a className="market-link" href={href} target="_blank" rel="noreferrer" aria-label={`View CSFloat listings for ${name} (opens in a new tab)`}>
@@ -268,11 +286,32 @@ function MarketActions({ row, pricing }: { row: SheetRow; pricing?: FlipPricing 
       </a>
       {pricing && (
         <button className="btn market-price" disabled={pricing.active !== undefined} onClick={() => pricing.onPrice(row)} title={priceHint}
-          aria-label={busy ? `Pricing ${name}` : quote ? `${priceText}. Refresh price for ${name}` : `Price item: ${name}`}>
-          <span aria-live="polite">{busy ? 'Pricing…' : quote ? priceText : 'Price item'}</span>
+          aria-label={busy ? `Pricing ${name}` : quote ? `Refresh price for ${name}` : `Price item: ${name}`}>
+          <span aria-live="polite">{busy ? 'Pricing…' : quote ? 'Refresh prices' : 'Price item'}</span>
           {quote && !busy && <span aria-hidden="true">↻</span>}
         </button>
       )}
+      {quote && <MarketPrices item={row.item} quote={quote} />}
+    </span>
+  );
+}
+
+function MarketPrices({ item, quote, onCheck, busy, disabled }: { item: Item; quote?: PriceQuote; onCheck?: () => void; busy?: boolean; disabled?: boolean }) {
+  const bid = quote?.instantSell?.[itemPriceKey(item)];
+  const lowest = !quote ? 'Not checked' : quote.priceCents === undefined ? 'No listings' : formatMoney(centsToDollars(quote.priceCents));
+  const instant = bid?.status !== 'matched' ? 'Unavailable' : bid.priceCents === undefined ? 'No matching orders' : formatMoney(centsToDollars(bid.priceCents));
+  return (
+    <span className="market-quotes">
+      <span title={quote && `Lowest buy-now listing for this market name, before fees. Checked ${formatTimeAgo(quote.fetchedAt)}.`}>
+        <span className="market-quote-label">Lowest list</span> {lowest}
+      </span>
+      <span title={bid?.status === 'matched' ? `Highest buy order matching this item's attributes, before fees. Checked ${formatTimeAgo(bid.fetchedAt)}.` : bid ? 'Could not verify matching buy orders for this item. Check buy orders to try again.' : 'Buy orders are checked manually for this item.'}>
+        <span className="market-quote-label">Insta sell</span> {bid || !onCheck ? instant : ''}
+        {onCheck && <button className="link buy-order-check" onClick={onCheck} disabled={disabled}
+          aria-label={`${bid ? 'Refresh' : 'Check'} buy orders for ${item.marketHashName}`}>
+          {busy ? 'Checking…' : bid ? 'Refresh' : 'Check buy orders'}
+        </button>}
+      </span>
     </span>
   );
 }
@@ -284,6 +323,7 @@ function TradeDetails({ row }: { row: SheetRow }) {
     ['Pattern seed', item.floatValue === undefined ? null : item.paintSeed],
     ['Fade', item.fadePercent === undefined ? null : `${item.fadePercent.toFixed(1)}%`],
     ['Stickers and charms', item.stickers?.length || item.charms?.length ? <Accessories item={item} /> : null],
+    ['Bought', formatDate(row.boughtAt)],
     ['Sold', formatDate(row.soldAt)],
     ['Held', formatDays(row.held)],
     ['Match', <MatchLabel row={row} />],

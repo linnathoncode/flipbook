@@ -1,11 +1,29 @@
 import { buildJournalView } from '../src/domain/journal';
 import { sectionRows, sortRows, totalRows } from '../src/domain/listFilters';
-import { duePriceNames, quoteFromResponse, type PriceQuote } from '../src/domain/prices';
+import { duePriceNames, highestBuyOrder, itemPriceKey, quoteFromResponse, type PriceQuote } from '../src/domain/prices';
 import { sticker, trade } from './builders';
 
 const NOW = new Date('2026-10-18T12:00:00Z');
 const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3600_000).toISOString();
 const quote = (name: string, priceCents: number, fetchedAt: string): PriceQuote => ({ name, priceCents, fetchedAt });
+
+describe('item buy-order quotes', () => {
+  it('keeps quotes separate for float, seed, finish, and attached accessories', () => {
+    const item = { ...sticker('Example'), floatValue: 0.02, paintSeed: 4, paintIndex: 3 };
+    for (const other of [
+      { ...item, floatValue: 0.03 }, { ...item, paintSeed: 5 }, { ...item, paintIndex: 8 },
+      { ...item, charms: [{ name: 'Charm', pattern: 4 }] },
+      { ...item, stickers: [{ name: 'Sticker', slot: 0 }] },
+    ]) expect(itemPriceKey(other)).not.toBe(itemPriceKey(item));
+    expect(itemPriceKey({ ...sticker('Charm'), assetId: 'one' })).not.toBe(itemPriceKey({ ...sticker('Charm'), assetId: 'two' }));
+  });
+
+  it('selects the highest active price from server-matched orders', () => {
+    expect(highestBuyOrder({ data: [{ price: 100, qty: 2 }, { price: 300, qty: 0 }, { price: 200 }, { price: -1 }, { price: '900' }] })).toBe(200);
+    expect(highestBuyOrder([])).toBeUndefined();
+    expect(() => highestBuyOrder({ error: 'Denied' })).toThrow();
+  });
+});
 
 describe('duePriceNames', () => {
   const quotes = new Map([

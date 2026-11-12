@@ -28,6 +28,8 @@ export interface CsfloatItem {
   icon_url?: string;
   serialized_inspect?: string;
   inspect_link?: string;
+  gs_sig?: string;
+  asset_id?: string;
   stickers?: { name?: string; slot?: number; icon_url?: string; wear?: number }[];
   keychains?: { name?: string; pattern?: number; icon_url?: string }[];
   fade?: { percentage?: number };
@@ -84,6 +86,8 @@ export function normalizeItem(raw: CsfloatItem): Item {
     isSouvenir: raw.is_souvenir ?? false,
     iconUrl: raw.icon_url,
     inspectLink: raw.serialized_inspect ?? raw.inspect_link,
+    inspectSignature: raw.gs_sig,
+    assetId: raw.asset_id,
     stickers: raw.stickers?.flatMap((sticker): AppliedSticker[] =>
       sticker.name ? [{ name: sticker.name, slot: sticker.slot ?? 0, iconUrl: sticker.icon_url, wear: sticker.wear }] : [],
     ),

@@ -159,7 +159,7 @@ export function App() {
     if (pricingFlip) return;
     setPricingFlip(row.key);
     try {
-      await requestItemPrice(row.item.marketHashName);
+      await requestItemPrice(row.item);
       if (!pricedFlips.includes(row.key)) setPricedFlips([...pricedFlips, row.key]);
       await refresh();
     } catch (cause) {
@@ -226,7 +226,7 @@ export function App() {
               setMenu(menu?.trigger ? undefined : { x: box.left, y: box.bottom + 4, trigger });
             }}
             moveMenuOpen={Boolean(menu?.trigger)}
-            flipPricing={current.kind === 'flips' ? {
+            flipPricing={current.kind === 'flips' || current.kind === 'folder' && current.folderId === HOLDS_ID ? {
               active: pricingFlip, requested: pricedFlips, quotes: journal.prices, onPrice: (row) => void priceFlip(row),
             } : undefined}
             onRowMenu={onRowMenu}

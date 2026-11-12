@@ -25,6 +25,8 @@ export interface Item {
   isSouvenir: boolean;
   iconUrl?: string;
   inspectLink?: string;
+  inspectSignature?: string;
+  assetId?: string;
   stickers?: AppliedSticker[];
   charms?: Charm[];
   /** How much of the fade shows, for Fade finishes. */

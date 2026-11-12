@@ -1,7 +1,8 @@
 import { normalizeCsfloatTrades, type CsfloatTrade } from '../domain/csfloatTrades';
 import { HOLDS_ID } from '../domain/folders';
 import { listingsInResponse, normalizeCsfloatListings } from '../domain/listings';
-import { duePriceNames, PRICE_KEEP_MS, quoteFromResponse, RATE_LIMIT_PAUSE_MS, type PriceQuote } from '../domain/prices';
+import { duePriceNames, highestBuyOrder, itemPriceKey, FORCED_MIN_AGE_MS, PRICE_KEEP_MS, quoteFromResponse, RATE_LIMIT_PAUSE_MS, type PriceQuote } from '../domain/prices';
+import type { Item } from '../domain/types';
 import { loadJournal } from './actions';
 import { PRICE_REQUEST_GAP_MS, withCsfloatSession, type CsfloatSession } from '../io/csfloatSync';
 import { loadPrices, loadSettings, loadTrades, replaceListings, savePrices, saveSettings, saveTrades } from '../io/journalStore';
@@ -92,23 +93,28 @@ async function syncListings(session: CsfloatSession, ownerSteamId: string): Prom
   await saveSettings({ ...(await loadSettings()), listingsError });
 }
 
-export async function priceItemFromCsfloat(name: string): Promise<PriceQuote> {
+export async function priceItemFromCsfloat(item: Item | string): Promise<PriceQuote> {
+  const name = typeof item === 'string' ? item : item.marketHashName;
   const now = new Date();
   const quotes = await loadPrices();
-  if (duePriceNames([name], quotes, now, true).length === 0) return quotes.get(name)!;
+  const bid = typeof item === 'string' ? undefined : quotes.get(name)?.instantSell?.[itemPriceKey(item)];
+  if (duePriceNames([name], quotes, now, true).length === 0 && (typeof item === 'string' || bid?.status === 'matched' && now.getTime() - Date.parse(bid.fetchedAt) < FORCED_MIN_AGE_MS)) return quotes.get(name)!;
   const { pricesPausedUntil } = await loadSettings();
   if (pricesPausedUntil && Date.parse(pricesPausedUntil) > now.getTime()) {
     throw new Error('CSFloat paused price lookups. Try again in a little while.');
   }
 
   const keepAfter = new Date(now.getTime() - PRICE_KEEP_MS).toISOString();
-  const result = await withCsfloatSession({ openTabIfNeeded: true }, (session) => lookupPrice(session, name, keepAfter));
+  const journal = typeof item === 'string' ? undefined : await loadJournal();
+  const listed = journal && [...journal.listed.values()].find((listing) => itemPriceKey(listing.item) === itemPriceKey(item as Item));
+  const result = await withCsfloatSession({ openTabIfNeeded: true }, (session) => lookupPrice(session, name, keepAfter,
+    typeof item === 'string' ? [] : [{ item, listingId: listed?.id }]));
   if (result === 'rateLimited') throw new Error('CSFloat paused price lookups for 30 minutes.');
   if (!result || result === 'failed') throw new Error('Could not get a price from CSFloat. Try again.');
   return result;
 }
 
-async function lookupPrice(session: CsfloatSession, name: string, keepAfter: string): Promise<PriceQuote | 'rateLimited' | 'failed'> {
+async function lookupPrice(session: CsfloatSession, name: string, keepAfter: string, items: { item: Item; listingId?: string }[] = []): Promise<PriceQuote | 'rateLimited' | 'failed'> {
   const answer = await session.cheapestListing(name);
   if ('rateLimited' in answer) {
     await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
@@ -116,7 +122,28 @@ async function lookupPrice(session: CsfloatSession, name: string, keepAfter: str
   }
   if ('failed' in answer) return 'failed';
   const quote = quoteFromResponse(name, answer.body, new Date().toISOString());
+  quote.instantSell = { ...(await loadPrices()).get(name)?.instantSell };
   await savePrices([quote], keepAfter);
+  for (const { item, listingId } of items) {
+    await new Promise((resolve) => setTimeout(resolve, PRICE_REQUEST_GAP_MS));
+    const listings = Array.isArray(answer.body) ? answer.body : (answer.body as { data?: unknown } | null)?.data;
+    const commodityListing = ['sticker', 'patch', 'container'].includes(item.type) && !item.stickers?.length && !item.charms?.length && Array.isArray(listings) ? listings[0]?.id : undefined;
+    const orders = await session.matchingBuyOrders(item, listingId ?? commodityListing);
+    if ('rateLimited' in orders) {
+      await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
+      return 'rateLimited';
+    }
+    let priceCents: number | undefined;
+    let status: 'matched' | 'unavailable' = 'unavailable';
+    if ('body' in orders) {
+      try {
+        priceCents = highestBuyOrder(orders.body);
+        status = 'matched';
+      } catch { /* An unknown response cannot establish an executable price. */ }
+    }
+    quote.instantSell[itemPriceKey(item)] = { priceCents, status, fetchedAt: new Date().toISOString() };
+    await savePrices([quote], keepAfter);
+  }
   return quote;
 }
 
@@ -131,7 +158,8 @@ async function refreshHeldPrices(session: CsfloatSession, force: boolean, onPric
 
   const journal = await loadJournal();
   const held = journal.shelved.folders.get(HOLDS_ID)?.openBuys ?? [];
-  const due = duePriceNames(held.map((buy) => buy.item.marketHashName), await loadPrices(), now, force);
+  const cached = await loadPrices();
+  const due = duePriceNames(held.map((buy) => buy.item.marketHashName), cached, now, force);
   if (due.length === 0) return;
 
   // Each price is saved as it lands, so the sheet fills in row by row instead of all at the end.

@@ -588,6 +588,27 @@ input {
   color: var(--ink);
 }
 
+.date-column-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet th .date-column-switch button {
+  padding: 3px 0;
+  color: var(--muted);
+}
+
+.sheet th .date-column-switch button[aria-pressed='true'] {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.sheet th .date-column-switch button:hover {
+  color: var(--ink);
+}
+
 .sheet td {
   padding: var(--pad-y) 8px;
   border-bottom: 1px solid var(--rule);
@@ -775,6 +796,30 @@ thead:hover .chk input {
 .market-link:focus-visible {
   color: var(--ink);
   text-decoration: underline;
+}
+
+.market-quotes {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.market-quote-label {
+  font-family: var(--font-ui);
+  color: var(--muted);
+}
+
+.buy-order-check {
+  margin-left: 5px;
+  font-weight: 400;
+}
+
+.buy-order-check:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .market-actions .market-price {

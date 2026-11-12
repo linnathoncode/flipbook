@@ -36,6 +36,7 @@ export interface SheetRow {
   listing?: ListedFor;
   /** An open buy priced at what it sells for on CSFloat now, and what selling there would make. */
   quote?: PricedAt;
+  marketQuote?: PriceQuote;
 }
 
 export interface PricedAt {
@@ -109,6 +110,7 @@ function openRow(buy: Trade, now: Date, feeRate: number, listing?: Listing, quot
     held: Math.max(0, Math.floor((now.getTime() - Date.parse(buy.at)) / DAY_MS)),
     listing: listing && listedFor(listing, buyPrice, feeRate),
     quote: quote?.priceCents === undefined ? undefined : pricedAt(quote, quote.priceCents, buyPrice, feeRate),
+    marketQuote: quote,
   };
 }
 

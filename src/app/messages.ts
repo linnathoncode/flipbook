@@ -1,5 +1,6 @@
 import { errorText, type PricingProgress, type SyncOptions, type SyncOutcome } from './sync';
 import type { PriceQuote } from '../domain/prices';
+import type { Item } from '../domain/types';
 
 /** Messages between the dashboard and the background worker, which owns syncing. */
 const SYNC_REQUEST = 'flipbook/sync';
@@ -33,16 +34,16 @@ export function handleSyncRequests(sync: (options: SyncOptions) => Promise<SyncO
   });
 }
 
-export async function requestItemPrice(name: string): Promise<PriceQuote> {
-  const reply = (await chrome.runtime.sendMessage({ type: ITEM_PRICE_REQUEST, name })) as PriceReply;
+export async function requestItemPrice(item: Item): Promise<PriceQuote> {
+  const reply = (await chrome.runtime.sendMessage({ type: ITEM_PRICE_REQUEST, item })) as PriceReply;
   if (!reply.ok) throw new Error(reply.error);
   return reply.quote;
 }
 
-export function handleItemPriceRequests(price: (name: string) => Promise<PriceQuote>): void {
-  chrome.runtime.onMessage.addListener((message: Message & { name?: string }, _sender, reply: (response: PriceReply) => void) => {
-    if (message.type !== ITEM_PRICE_REQUEST || typeof message.name !== 'string' || !message.name.trim()) return false;
-    price(message.name)
+export function handleItemPriceRequests(price: (item: Item) => Promise<PriceQuote>): void {
+  chrome.runtime.onMessage.addListener((message: Message & { item?: Item }, _sender, reply: (response: PriceReply) => void) => {
+    if (message.type !== ITEM_PRICE_REQUEST || typeof message.item?.marketHashName !== 'string' || !message.item.marketHashName.trim()) return false;
+    price(message.item)
       .then((quote) => reply({ ok: true, quote }))
       .catch((cause: unknown) => reply({ ok: false, error: errorText(cause) }));
     return true;

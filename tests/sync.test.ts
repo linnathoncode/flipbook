@@ -1,6 +1,8 @@
 import { priceItemFromCsfloat, syncFromCsfloat } from '../src/app/sync';
 import type { CsfloatTrade } from '../src/domain/csfloatTrades';
-import { loadSettings, loadTrades, saveSettings } from '../src/io/journalStore';
+import { loadPrices, loadSettings, loadTrades, placeTrades, savePrices, saveSettings } from '../src/io/journalStore';
+import { itemPriceKey } from '../src/domain/prices';
+import { normalizeItem } from '../src/domain/csfloatTrades';
 
 const { stores } = vi.hoisted(() => ({ stores: new Map<string, Map<string, unknown>>() }));
 
@@ -53,9 +55,11 @@ beforeEach(() => {
   vi.stubGlobal('chrome', {
     tabs: { query: async () => [{ id: 1 }] },
     scripting: {
-      executeScript: async ({ func, args }: { func: (...args: unknown[]) => Promise<unknown>; args: unknown[] }) => [
-        { result: await func(...args) },
-      ],
+      executeScript: async ({ func, args }: { func: (...args: unknown[]) => Promise<unknown>; args: unknown[] }) => {
+        const serializedArgs = JSON.parse(JSON.stringify(args)) as unknown[];
+        expect(args).toStrictEqual(serializedArgs);
+        return [{ result: await func(...serializedArgs) }];
+      },
     },
   });
 });
@@ -125,4 +129,116 @@ it('shares the CSFloat rate-limit pause between item lookups', async () => {
   await expect(priceItemFromCsfloat('Sticker | Lil Ava')).rejects.toThrow('30 minutes');
   await expect(priceItemFromCsfloat('Sticker | Crown (Foil)')).rejects.toThrow('paused price lookups');
   expect(fetchListings).toHaveBeenCalledTimes(1);
+});
+
+it('uses each signed item inspection for matching orders and isolates same-name quotes', async () => {
+  const first = normalizeItem({ market_hash_name: 'Skin', type: 'skin', float_value: 0.01, paint_seed: 1, serialized_inspect: 'inspect-one', gs_sig: 'sig-one' });
+  const second = { ...first, floatValue: 0.2, paintSeed: 2, inspectLink: 'inspect-two', inspectSignature: 'sig-two' };
+  const fetchPrice = vi.fn(async (path: string) => {
+    const url = new URL(path, 'https://csfloat.com');
+    if (url.pathname === '/api/v1/listings') return Response.json([{ id: 'unrelated-cheapest-skin', price: 1500 }]);
+    expect(url.pathname).toBe('/api/v1/buy-orders/item');
+    expect(url.searchParams.get('market_hash_name')).toBe('Skin');
+    const firstItem = url.searchParams.get('url') === 'inspect-one';
+    expect(url.searchParams.get('sig')).toBe(firstItem ? 'sig-one' : 'sig-two');
+    return Response.json([{ price: firstItem ? 1200 : 800, qty: 1 }]);
+  });
+  vi.stubGlobal('fetch', fetchPrice);
+  const one = await priceItemFromCsfloat(first);
+  expect(one.instantSell?.[itemPriceKey(first)]).toMatchObject({ priceCents: 1200, status: 'matched' });
+  const two = await priceItemFromCsfloat(second);
+  expect(two.instantSell?.[itemPriceKey(second)]?.priceCents).toBe(800);
+  expect(two.instantSell?.[itemPriceKey(first)]?.priceCents).toBe(1200);
+  await priceItemFromCsfloat(second);
+  expect(fetchPrice).toHaveBeenCalledTimes(4);
+});
+
+it('resolves the exact inventory item before requesting float and pattern matching', async () => {
+  const item = normalizeItem({ market_hash_name: 'Skin', type: 'skin', float_value: 0.03, paint_seed: 12, paint_index: 4 });
+  vi.stubGlobal('fetch', async (path: string) => {
+    if (path.startsWith('/api/v1/listings?')) return Response.json([{ id: 'cheapest-other-seed', price: 500 }]);
+    if (path === '/api/v1/me/inventory') return Response.json([
+      { market_hash_name: 'Skin', float_value: 0.03, paint_seed: 99, paint_index: 4, serialized_inspect: 'wrong', gs_sig: 'wrong' },
+      { market_hash_name: 'Skin', float_value: 0.03, paint_seed: 12, paint_index: 4, serialized_inspect: 'correct', gs_sig: 'signed' },
+    ]);
+    const url = new URL(path, 'https://csfloat.com');
+    expect(url.pathname).toBe('/api/v1/buy-orders/item');
+    expect(url.searchParams.get('url')).toBe('correct');
+    expect(url.searchParams.get('sig')).toBe('signed');
+    return Response.json([]);
+  });
+  const quote = await priceItemFromCsfloat(item);
+  expect(quote.instantSell?.[itemPriceKey(item)]).toMatchObject({ status: 'matched', priceCents: undefined });
+});
+
+it('keeps the lowest listing but marks instant sell unavailable when the item cannot be verified', async () => {
+  const item = normalizeItem({ market_hash_name: 'Skin', type: 'skin', float_value: 0.03, paint_seed: 12 });
+  const fetchPrice = vi.fn(async (path: string) => path === '/api/v1/me/inventory' ? Response.json([]) : Response.json([{ id: 'wrong-pattern', price: 500 }]));
+  vi.stubGlobal('fetch', fetchPrice);
+  const quote = await priceItemFromCsfloat(item);
+  expect(quote.priceCents).toBe(500);
+  expect(quote.instantSell?.[itemPriceKey(item)]?.status).toBe('unavailable');
+  expect(fetchPrice).toHaveBeenCalledTimes(2);
+});
+
+it('uses listing-matched orders for interchangeable stickers', async () => {
+  const item = normalizeItem({ market_hash_name: 'Sticker | A', type: 'sticker' });
+  vi.stubGlobal('fetch', async (path: string) => {
+    if (path.startsWith('/api/v1/listings?')) return Response.json([{ id: 'sticker-listing', price: 500 }]);
+    expect(path).toBe('/api/v1/listings/sticker-listing/buy-orders?limit=1&exclude_own=true');
+    return Response.json([{ price: 400 }]);
+  });
+  const quote = await priceItemFromCsfloat(item);
+  expect(quote.instantSell?.[itemPriceKey(item)]?.priceCents).toBe(400);
+});
+
+it('preserves lowest-list data and pauses requests when buy-order lookup is rate limited', async () => {
+  const item = normalizeItem({ market_hash_name: 'Skin', type: 'skin', serialized_inspect: 'inspect', gs_sig: 'sig' });
+  vi.stubGlobal('fetch', async (path: string) => path.startsWith('/api/v1/listings?') ? Response.json([{ price: 500 }]) : new Response(null, { status: 429 }));
+  await expect(priceItemFromCsfloat(item)).rejects.toThrow('30 minutes');
+  expect((await loadPrices()).get(item.marketHashName)?.priceCents).toBe(500);
+  expect((await loadSettings()).pricesPausedUntil).toBeDefined();
+  await expect(priceItemFromCsfloat(item)).rejects.toThrow('paused price lookups');
+});
+
+it.each([false, true])('Holds batch pricing only fetches listings and preserves manual buy-order quotes, forced=%s', async (forcePrices) => {
+  const raw: CsfloatTrade = { ...sample, buyer_id: seller, seller_id: buyer };
+  const name = raw.contract.item.market_hash_name;
+  const item = normalizeItem(raw.contract.item);
+  const oldDate = new Date(Date.now() - 2 * 86400_000).toISOString();
+  const bid = { status: 'matched' as const, priceCents: 80, fetchedAt: oldDate };
+  await placeTrades([raw.id], 'holds');
+  await savePrices([{ name, priceCents: 100, fetchedAt: oldDate, instantSell: { [itemPriceKey(item)]: bid } }], '2000-01-01');
+  const fetchPrice = vi.fn(async (path: string) => {
+    if (path === '/api/v1/me') return Response.json({ user: { steam_id: seller } });
+    if (path.startsWith('/api/v1/me/trades?')) return Response.json({ trades: [raw], count: 1 });
+    if (path.startsWith(`/api/v1/users/${seller}/stall?`)) return Response.json([]);
+    if (path.startsWith('/api/v1/listings?')) return Response.json([{ price: 150 }]);
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchPrice);
+  await syncFromCsfloat({ openTabIfNeeded: false, forcePrices });
+  const quote = (await loadPrices()).get(name)!;
+  expect(quote.priceCents).toBe(150);
+  expect(quote.instantSell?.[itemPriceKey(item)]).toEqual(bid);
+  expect(fetchPrice).toHaveBeenCalledTimes(4);
+});
+
+it('does not refresh a fresh Holds listing just because no buy-order quote exists', async () => {
+  const raw: CsfloatTrade = { ...sample, buyer_id: seller, seller_id: buyer };
+  await placeTrades([raw.id], 'holds');
+  await savePrices([{ name: raw.contract.item.market_hash_name, priceCents: 100, fetchedAt: new Date().toISOString() }], '2000-01-01');
+  const fetchPrice = vi.fn(async (path: string) => {
+    if (path === '/api/v1/me') return Response.json({ user: { steam_id: seller } });
+    if (path.startsWith('/api/v1/me/trades?')) return Response.json({ trades: [raw], count: 1 });
+    if (path.startsWith(`/api/v1/users/${seller}/stall?`)) return Response.json([]);
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchPrice);
+  await syncFromCsfloat({ openTabIfNeeded: false, forcePrices: true });
+  const quote = (await loadPrices()).get(raw.contract.item.market_hash_name)!;
+  expect(quote.priceCents).toBe(100);
+  expect(quote.instantSell).toBeUndefined();
+  expect((await loadSettings()).pricesPausedUntil).toBeUndefined();
+  expect(fetchPrice).toHaveBeenCalledTimes(3);
 });
