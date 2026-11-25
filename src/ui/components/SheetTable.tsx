@@ -10,6 +10,7 @@ import { rarityColor } from '../rarity';
 import { steamImageUrl } from '../steamImages';
 import type { Entry, Selection } from '../useSelection';
 import { HoverCardProvider, useHoverCard, type CardContent } from './HoverCard';
+import { RollingNumber } from './RollingNumber';
 import { Signal } from './Signal';
 import { CONFIDENCE, isAfter, itemTitle, signClass, SortHeader } from './shared';
 
@@ -513,7 +514,7 @@ function ProfitPercent({ percent, detailed }: { percent: number; detailed: boole
   const extent = Math.min(magnitude / PROFIT_BAR_LIMIT, 1) * 50;
   return (
     <span className={`profit-result ${tone}`}>
-      <span>{magnitude === 0 ? '0.0%' : formatPercent(Math.sign(percent) * magnitude)}</span>
+      <RollingNumber value={percent} text={magnitude === 0 ? '0.0%' : formatPercent(Math.sign(percent) * magnitude)} zero="0.0%" />
       {detailed && (
         <span className="profit-track" aria-hidden="true">
           {tone && <span className="profit-bar" style={{ width: `${extent}%` }} />}
@@ -618,13 +619,16 @@ function SteamImage({ iconUrl, width, height = width, fallback }: { iconUrl?: st
 const rangeText = (range: FloatRange) => `${range.min.toFixed(2)} to ${range.max.toFixed(2)}`;
 
 function FloatCell({ item, detailed }: { item: Item; detailed: boolean }) {
-  if (item.floatValue === undefined) return null;
+  const value = item.floatValue;
+  if (value === undefined) return null;
   const range = floatRange(item);
-  if (!detailed || !range) return <span title={String(item.floatValue)}>{formatFloat(item.floatValue)}</span>;
-  const bar = { '--f': item.floatValue, '--lo': range.min, '--hi': range.max } as CSSProperties;
+  if (!detailed || !range) {
+    return <span title={String(value)}><RollingNumber value={value} text={formatFloat(value)} zero="0.0000" /></span>;
+  }
+  const bar = { '--f': value, '--lo': range.min, '--hi': range.max } as CSSProperties;
   return (
-    <span className="flt" title={String(item.floatValue)}>
-      <span>{formatFloat(item.floatValue, 6)}</span>
+    <span className="flt" title={String(value)}>
+      <RollingNumber value={value} text={formatFloat(value, 6)} zero="0.000000" />
       <span className="wbar" style={bar} title={`${item.wearName ?? 'Wear'}. This skin's floats run ${rangeText(range)}.`}>
         <b className="cap l" />
         <b className="cap r" />
