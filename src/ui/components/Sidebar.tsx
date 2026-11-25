@@ -1,4 +1,4 @@
-import { useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { exportWorkbook } from '../../app/actions';
 import { errorText } from '../../app/sync';
 import type { Folder } from '../../domain/folders';
@@ -26,6 +26,21 @@ interface Props {
 
 export function Sidebar({ place, onNavigate, folders, counts, onDropRows, onFolderCreated }: Props) {
   const [creating, setCreating] = useState(false);
+  const [sheetsOpen, setSheetsOpen] = useState(false);
+  const sheetPicker = useRef<HTMLDivElement>(null);
+  const sheetTrigger = useRef<HTMLButtonElement>(null);
+  const sheetsId = useId();
+  const sheetName = place.kind === 'folder' ? folders.find((folder) => folder.id === place.folderId)?.name
+    : place.kind === 'flips' ? 'Flips' : undefined;
+
+  useEffect(() => {
+    if (!sheetsOpen) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (!sheetPicker.current?.contains(event.target as Node)) setSheetsOpen(false);
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [sheetsOpen]);
 
   const item = (target: Place, label: string, extra?: ReactNode, dropTo?: string | null) => (
     <NavItem
@@ -33,8 +48,15 @@ export function Sidebar({ place, onNavigate, folders, counts, onDropRows, onFold
       label={label}
       icon={target.kind}
       current={isSamePlace(place, target)}
-      onClick={() => onNavigate(target)}
-      onDrop={dropTo === undefined ? undefined : () => onDropRows(dropTo)}
+      onClick={() => {
+        if (sheetsOpen && dropTo !== undefined) sheetTrigger.current?.focus();
+        setSheetsOpen(false);
+        onNavigate(target);
+      }}
+      onDrop={dropTo === undefined ? undefined : () => {
+        setSheetsOpen(false);
+        onDropRows(dropTo);
+      }}
     >
       {extra}
     </NavItem>
@@ -46,22 +68,46 @@ export function Sidebar({ place, onNavigate, folders, counts, onDropRows, onFold
         <img className="logo" src="./icons/48.png" alt="" />
         flipbook
       </div>
-      <div className="nav-sec">
-        {item({ kind: 'flips' }, 'Flips', <Count n={counts.flips} />, null)}
-        {folders.map((folder) =>
-          item({ kind: 'folder', folderId: folder.id }, folder.name, <Count n={counts.folders.get(folder.id) ?? 0} />, folder.id),
-        )}
-        {creating ? (
-          <NewFolderForm
-            onCreated={(folder) => {
-              setCreating(false);
-              onFolderCreated(folder);
-            }}
-            onCancel={() => setCreating(false)}
-          />
-        ) : (
-          <button className="nav-item dim" onClick={() => setCreating(true)}><Icon name="add" /> <span>New folder</span></button>
-        )}
+      <div className="sheet-picker" ref={sheetPicker}
+        onBlur={(event) => {
+          if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setSheetsOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || !sheetsOpen || event.target instanceof HTMLInputElement) return;
+          event.preventDefault();
+          setSheetsOpen(false);
+          sheetTrigger.current?.focus();
+        }}>
+        <button className="nav-item sheet-picker-trigger" ref={sheetTrigger} type="button"
+          aria-label={sheetName ? `Sheets, current sheet: ${sheetName}` : 'Sheets'}
+          aria-expanded={sheetsOpen} aria-controls={sheetsId}
+          onDragEnter={(event) => {
+            if (event.dataTransfer.types.includes('text/plain')) setSheetsOpen(true);
+          }}
+          onClick={() => setSheetsOpen(!sheetsOpen)}>
+          <Icon name={place.kind === 'flips' ? 'flips' : 'folder'} />
+          <span>{sheetName ?? 'Sheets'}</span>
+          <Icon name="chevronDown" />
+        </button>
+        <div className="nav-sec sheet-picker-list" id={sheetsId} data-open={sheetsOpen || undefined}>
+          <div className="nav-sec sheet-picker-links">
+            {item({ kind: 'flips' }, 'Flips', <Count n={counts.flips} />, null)}
+            {folders.map((folder) =>
+              item({ kind: 'folder', folderId: folder.id }, folder.name, <Count n={counts.folders.get(folder.id) ?? 0} />, folder.id),
+            )}
+          </div>
+          {creating ? (
+            <NewFolderForm
+              onCreated={(folder) => {
+                setCreating(false);
+                onFolderCreated(folder);
+              }}
+              onCancel={() => setCreating(false)}
+            />
+          ) : (
+            <button className="nav-item dim" onClick={() => setCreating(true)}><Icon name="add" /> <span>New folder</span></button>
+          )}
+        </div>
       </div>
       <div className="nav-gap" aria-hidden="true" />
       <div className="nav-sec">
@@ -106,7 +152,7 @@ function NavItem({ label, icon, current, onClick, onDrop, children }: NavItemPro
       }
     : {};
   return (
-    <button className={`nav-item ${over ? 'over' : ''}`} aria-current={current ? 'page' : undefined} onClick={onClick} {...dragProps}>
+    <button className={`nav-item ${over ? 'over' : ''}`} title={label} aria-current={current ? 'page' : undefined} onClick={onClick} {...dragProps}>
       <Icon name={icon} />
       <span title={label}>{label}</span>
       {children}
@@ -137,7 +183,7 @@ function ExportButton() {
   return (
     <>
       {status.error && <p className="nav-error" role="alert">{status.error}</p>}
-      <button className="nav-item dim" onClick={download} disabled={status.busy}>
+      <button className="nav-item dim" title="Export .xlsx" onClick={download} disabled={status.busy}>
         <Icon name="export" />
         <span>{status.busy ? 'Building spreadsheet\u2026' : 'Export .xlsx'}</span>
       </button>

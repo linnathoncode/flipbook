@@ -1,6 +1,7 @@
 const icons = {
   flips: (<><path fill="currentColor" d="M4 3h9.4A2.6 2.6 0 0 1 16 5.6v9.6H6a2 2 0 0 0-2 2V3Z"/><path d="M4 16.5a1.5 1.5 0 0 0 1.5 1.5H16"/><path d="M8 7h4m-4 3.5h3" stroke="var(--icon-cutout)"/></>),
   folder: (<><path d="M3 6.5a2 2 0 0 1 2-2h3l1.6 2h5.4a2 2 0 0 1 2 2v5.1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></>),
+  chevronDown: <path d="m5 8 5 5 5-5"/>,
   review: (<><path d="M15.7 9a5.8 5.8 0 1 0-3 5.1L16.3 17"/><path d="M10 6.6v3.3m0 2.3h.01"/></>),
   analytics: (<><path d="M4 4v12h12M8 12v-2m4 2V7m4 5V4"/></>),
   search: (<><circle cx="8.7" cy="8.7" r="4.6"/><path d="m12.3 12.3 3.5 3.5"/></>),

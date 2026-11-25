@@ -81,6 +81,8 @@ export function SheetScreen({
 }: Props) {
   const sheet = useRef<HTMLDivElement>(null);
   const inspectorHeading = useRef<HTMLHeadingElement>(null);
+  const filtersTrigger = useRef<HTMLButtonElement>(null);
+  const ledger = useRef<HTMLDivElement>(null);
   const backToAnalytics = useRef<HTMLButtonElement>(null);
   const focusSearch = useRef(false);
   const focusInspector = useRef(false);
@@ -131,7 +133,7 @@ export function SheetScreen({
       onToggleDetails(expandedRow.key);
     } else inspectorHeading.current?.focus();
   };
-  const filterControls = <Filters rows={scopedRows} filter={view.filter} onChange={view.setFilter}
+  const filterControls = <Filters rows={scopedRows} closedOnly={Boolean(drilldown)} filter={view.filter} onChange={view.setFilter}
     excluding={excluding} setExcluding={setExcluding} />;
 
   return (
@@ -157,11 +159,11 @@ export function SheetScreen({
       {selection.count > 0 ? (
         <SelectionBar count={selection.count} onMoveMenu={onMoveMenu} moveMenuOpen={moveMenuOpen} onClear={selection.clear} />
       ) : (
-        <Toolbar view={view} shown={shown.length} total={rows.length} holds={holds} hasSales={hasSales}
+        <Toolbar view={view} shown={shown.length} total={scopedRows.length} holds={holds} hasSales={hasSales} filtersTrigger={filtersTrigger}
           inspectorId={showInspector ? detailsId : undefined} filtersVisible={view.filtersOpen} onFilters={showFilters} />
       )}
       {!showInspector && view.filtersOpen && filterControls}
-      <div className="tablewrap" role="region" aria-label="Trade ledger" tabIndex={0}>
+      <div className="tablewrap" ref={ledger} role="region" aria-label="Trade ledger" tabIndex={0}>
         <SheetTable
           rows={pageRows}
           allRows={shown}
@@ -180,7 +182,10 @@ export function SheetScreen({
           flipPricing={flipPricing}
           empty={
             filtered ? (
-              <>No rows match. <button className="btn ghost" onClick={() => view.setFilter(EMPTY_FILTER)}>Clear search and filters</button></>
+              <>No rows match. <button className="btn ghost" onClick={() => {
+                sheet.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+                view.setFilter(EMPTY_FILTER);
+              }}>Clear search and filters</button></>
             ) : (
               drilldown ? 'No trades from this Analytics selection remain in Flips.' : emptyText(folder)
             )
@@ -192,8 +197,12 @@ export function SheetScreen({
       </div>
       {shown.length > SMALLEST_PAGE && <Pager view={view} page={page} pageCount={pageCount} total={shown.length} />}
       {showInspector && (
-        <aside className="sheet-inspector" id={detailsId}
-          aria-label={expandedRow ? 'Trade details' : 'Filters'}>
+        <aside className="sheet-inspector" id={detailsId} aria-label={expandedRow ? 'Trade details' : 'Filters'}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape' || expandedRow || event.defaultPrevented) return;
+            event.preventDefault();
+            (filtersTrigger.current ?? ledger.current)?.focus();
+          }}>
           <div className="sheet-inspector-header">
             <h2 ref={inspectorHeading} tabIndex={-1}>{expandedRow ? 'Trade details' : 'Filters'}</h2>
             {expandedRow && <button className="btn ghost" onClick={showFilters}>Back to filters</button>}
@@ -439,9 +448,9 @@ function SheetSort({ sort, onSort, holds, hasSales }: { sort: Sort; onSort: (sor
   );
 }
 
-function Toolbar({ view, shown, total, holds, hasSales, inspectorId, filtersVisible, onFilters }: {
+function Toolbar({ view, shown, total, holds, hasSales, inspectorId, filtersTrigger, filtersVisible, onFilters }: {
   view: SheetView; shown: number; total: number; holds: boolean; hasSales: boolean; inspectorId?: string;
-  filtersVisible: boolean; onFilters: () => void;
+  filtersTrigger: RefObject<HTMLButtonElement>; filtersVisible: boolean; onFilters: () => void;
 }) {
   const { kinds, result, excludedKinds, excludedResults } = view.filter;
   const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
@@ -459,7 +468,7 @@ function Toolbar({ view, shown, total, holds, hasSales, inspectorId, filtersVisi
           autoComplete="off"
         />
       </label>
-      <button className="btn" aria-expanded={inspectorId ? undefined : filtersVisible} aria-controls={inspectorId ?? 'filters'} onClick={onFilters}>
+      <button className="btn" ref={filtersTrigger} aria-expanded={inspectorId ? undefined : filtersVisible} aria-controls={inspectorId ?? 'filters'} onClick={onFilters}>
         <Icon name="filter" /> Filters{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
       </button>
       <SheetSort sort={view.sort} onSort={view.setSort} holds={holds} hasSales={hasSales} />
@@ -496,51 +505,60 @@ function SelectionBar({ count, onMoveMenu, moveMenuOpen, onClear }: SelectionBar
 }
 
 /** Only the kinds on this sheet get a chip. */
-function Filters({ rows, filter, onChange, excluding, setExcluding }: {
-  rows: SheetRow[]; filter: ListFilter; onChange: (filter: ListFilter) => void;
+function Filters({ rows, closedOnly, filter, onChange, excluding, setExcluding }: {
+  rows: SheetRow[]; closedOnly: boolean; filter: ListFilter; onChange: (filter: ListFilter) => void;
   excluding: boolean; setExcluding: (value: boolean) => void;
 }) {
+  const mode = useRef<HTMLDivElement>(null);
   const present = new Set(rows.map((row) => itemKind(row.item)));
   const kinds = ITEM_KINDS.filter((kind) => present.has(kind) || filter.kinds.includes(kind) || filter.excludedKinds.includes(kind));
-  const hide = (event: MouseEvent, next: ListFilter) => {
-    event.preventDefault();
-    onChange(next);
-  };
+  const results = RESULTS.filter(({ value }) =>
+    (!excluding || value !== 'all') && (!closedOnly || (value !== 'open' && value !== 'listed')));
 
   return (
     <div className="filters" id="filters">
-      <div className="seg filter-mode" role="group" aria-label="Filter action">
+      <div className="seg filter-mode" role="group" aria-label="Filter action" ref={mode}>
         <button type="button" aria-pressed={!excluding} onClick={() => setExcluding(false)}>Include</button>
         <button type="button" aria-pressed={excluding} onClick={() => setExcluding(true)}>Exclude</button>
       </div>
       <span className="flabel">Type</span>
-      {kinds.map((kind) => (
-        <button
-          key={kind}
-          className={filter.excludedKinds.includes(kind) ? 'chip excluded' : 'chip'}
-          aria-pressed={filter.excludedKinds.includes(kind) || filter.kinds.includes(kind)}
-          aria-label={filter.excludedKinds.includes(kind) ? `Clear exclusion for ${KIND_PLURAL[kind]}` : undefined}
-          onClick={() => onChange(excluding || filter.excludedKinds.includes(kind) ? toggleExcludedKind(filter, kind) : toggleKind(filter, kind))}
-          onContextMenu={(event) => hide(event, toggleExcludedKind(filter, kind))}
-        >
-          {KIND_PLURAL[kind]}{filter.excludedKinds.includes(kind) && <span aria-hidden="true"> ×</span>}
-        </button>
-      ))}
+      {kinds.map((kind) => {
+        const included = filter.kinds.includes(kind);
+        const excluded = filter.excludedKinds.includes(kind);
+        const toggleExcluded = () => onChange(toggleExcludedKind(filter, kind));
+        return <FilterChip key={kind} label={KIND_PLURAL[kind]} included={included} excluded={excluded}
+          onActivate={excluded || (excluding && !included) ? toggleExcluded : () => onChange(toggleKind(filter, kind))}
+          onExclude={toggleExcluded} />;
+      })}
       <span className="flabel">Result</span>
-      {RESULTS.filter((result) => !excluding || result.value !== 'all').map((result) => (
-        <button
-          key={result.value}
-          className={filter.excludedResults.includes(result.value) ? 'chip excluded' : 'chip'}
-          aria-pressed={filter.excludedResults.includes(result.value) || filter.result === result.value}
-          aria-label={filter.excludedResults.includes(result.value) ? `Clear exclusion for ${result.label}` : undefined}
-          onClick={() => onChange(excluding || filter.excludedResults.includes(result.value) ? toggleExcludedResult(filter, result.value) : pickResult(filter, result.value))}
-          onContextMenu={(event) => hide(event, toggleExcludedResult(filter, result.value))}
-        >
-          {result.label}{filter.excludedResults.includes(result.value) && <span aria-hidden="true"> ×</span>}
-        </button>
-      ))}
-      {isNarrowed(filter) && <button className="btn ghost" onClick={() => onChange(clearChips(filter))}>Clear filters</button>}
+      {results.map(({ value, label }) => {
+        const included = filter.result === value;
+        const excluded = filter.excludedResults.includes(value);
+        const toggleExcluded = () => onChange(toggleExcludedResult(filter, value));
+        return <FilterChip key={value} label={label} included={included} excluded={excluded}
+          onActivate={excluded || (excluding && !included) ? toggleExcluded : () => onChange(pickResult(filter, included ? 'all' : value))}
+          onExclude={value === 'all' ? undefined : toggleExcluded} />;
+      })}
+      {isNarrowed(filter) && <button className="btn ghost" onClick={() => {
+        mode.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
+        onChange(clearChips(filter));
+      }}>Clear filters</button>}
     </div>
+  );
+}
+
+function FilterChip({ label, included, excluded, onActivate, onExclude }: {
+  label: string; included: boolean; excluded: boolean; onActivate: () => void; onExclude?: () => void;
+}) {
+  return (
+    <button type="button" className={excluded ? 'chip excluded' : 'chip'} aria-pressed={excluded ? undefined : included}
+      aria-label={excluded ? `Clear exclusion for ${label}` : undefined} onClick={onActivate}
+      onContextMenu={onExclude && ((event) => {
+        event.preventDefault();
+        onExclude();
+      })}>
+      {label}{excluded && <span aria-hidden="true"> ×</span>}
+    </button>
   );
 }
 
