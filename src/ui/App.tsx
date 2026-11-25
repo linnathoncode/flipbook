@@ -5,7 +5,7 @@ import { errorText } from '../app/sync';
 import { HOLDS_ID, OTHER_ID, sectionSize, type Folder, type Section } from '../domain/folders';
 import { itemKind, KIND_PLURAL } from '../domain/itemKinds';
 import { EMPTY_FILTER, filterRows, sectionRows, SORT_KEYS, sortRows, type ListFilter, type SheetRow, type Sort } from '../domain/listFilters';
-import { AnalyticsScreen, type AnalyticsDrilldown } from './components/AnalyticsScreen';
+import { AnalyticsScreen, type AnalyticsDrilldown, type AnalyticsPosition } from './components/AnalyticsScreen';
 import { MoveMenu, type MenuTarget } from './components/MoveMenu';
 import { ReviewScreen } from './components/ReviewScreen';
 import { SettingsPanel, type WideLayout } from './components/SettingsPanel';
@@ -35,6 +35,7 @@ export function App() {
   const [filter, setFilterState] = useState<ListFilter>(EMPTY_FILTER);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [drilldown, setDrilldown] = useState<AnalyticsDrilldown>();
+  const [analyticsPosition, setAnalyticsPosition] = useState<AnalyticsPosition>();
   const [expandedKey, setExpandedKey] = useState<string>();
   const detailsTrigger = useRef<HTMLButtonElement>(null);
   // The sort every sheet used before each kept its own; still the starting point for sheets never sorted.
@@ -94,6 +95,7 @@ export function App() {
     setFilterState(EMPTY_FILTER);
     setFiltersOpen(false);
     setDrilldown(undefined);
+    setAnalyticsPosition(undefined);
     setExpandedKey(undefined);
     setPlace(next);
   };
@@ -247,9 +249,11 @@ export function App() {
             expandedKey={expandedKey}
             detailsTrigger={detailsTrigger}
             onToggleDetails={(key) => setExpandedKey((current) => current === key ? undefined : key)}
-            onCloseDetails={closeDetails}
             drilldown={drilldown}
-            onBackToAnalytics={() => navigate({ kind: 'analytics' })}
+            onBackToAnalytics={() => {
+              navigate({ kind: 'analytics' });
+              setAnalyticsPosition(drilldown?.position);
+            }}
             onClearDrilldown={() => {
               setDrilldown(undefined);
               setExpandedKey(undefined);
@@ -258,6 +262,7 @@ export function App() {
             }}
             folder={folder}
             rows={rows}
+            scopedRows={scopedRows}
             shown={shown}
             hasSales={hasSales}
             view={view}
@@ -295,7 +300,9 @@ export function App() {
             onOpenOther={() => navigate({ kind: 'folder', folderId: OTHER_ID })}
           />
         )}
-        {current.kind === 'analytics' && <AnalyticsScreen journal={journal} sync={syncProps} onOpenTrades={openAnalyticsTrades} />}
+        {current.kind === 'analytics' && (
+          <AnalyticsScreen journal={journal} sync={syncProps} onOpenTrades={openAnalyticsTrades} returnTo={analyticsPosition} />
+        )}
         {current.kind === 'settings' && (
           <SettingsPanel
             wideLayout={wideLayout}
@@ -361,7 +368,7 @@ function useKeyboard(handlers: KeyboardHandlers) {
   latest.current = handlers;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || (event.target as HTMLElement).closest('input, textarea, select')) return;
+      if (event.defaultPrevented || (event.target as Element).closest('input:not([type="checkbox"]), textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') latest.current.onEscape();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && latest.current.onSelectAll) {
         event.preventDefault();

@@ -64,7 +64,7 @@ export function CumulativeChart({ data }: { data: Analytics }) {
   );
 }
 
-export function MonthChart({ data, onOpen }: { data: Analytics; onOpen: (month: Analytics['byMonth'][number]) => void }) {
+export function MonthChart({ data, onOpen }: { data: Analytics; onOpen: (month: Analytics['byMonth'][number], controlId: string) => void }) {
   const [width, height, left, right, top, bottom] = [380, 240, 46, 6, 22, 36];
   const values = data.byMonth.map((month) => month.net);
   const scale = ticks(Math.min(0, ...values), Math.max(1, ...values), 4);
@@ -93,14 +93,14 @@ export function MonthChart({ data, onOpen }: { data: Analytics; onOpen: (month: 
         const barHeight = Math.abs(y(net) - y(0));
         const hasSales = month.sellIds.length > 0;
         return (
-          <g key={month.month} className={hasSales ? 'chart-month-action' : undefined}
+          <g key={month.month} id={hasSales ? `analytics-month-${month.month}` : undefined} className={hasSales ? 'chart-month-action' : undefined}
             role={hasSales ? 'button' : undefined} tabIndex={hasSales ? 0 : undefined}
             aria-label={hasSales ? `View ${plural(month.sellIds.length, 'trade')} in ${formatMonth(month.month)} ${month.month.slice(0, 4)}, ${formatSignedMoney(net)} net` : undefined}
-            onClick={hasSales ? () => onOpen(month) : undefined}
+            onClick={hasSales ? (event) => onOpen(month, event.currentTarget.id) : undefined}
             onKeyDown={hasSales ? (event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                onOpen(month);
+                onOpen(month, event.currentTarget.id);
               }
             } : undefined}>
             {hasSales && <rect className="chart-month-hit" x={center - band / 2} y={top} width={band} height={height - top - 2} rx={3} />}
@@ -141,13 +141,14 @@ function monthStep(band: number): number {
 /** 0 for January through 11 for December, from "2026-03". */
 const monthOf = (month: string) => Number(month.slice(5, 7)) - 1;
 
-export function KindBars({ data, onOpen }: { data: Analytics; onOpen: (label: string, sellIds: string[]) => void }) {
-  return <NetBars rows={data.byKind.map(({ kind, ...group }) => ({ ...group, label: KIND_PLURAL[kind] }))} onOpen={onOpen} />;
+export function KindBars({ data, onOpen }: { data: Analytics; onOpen: (label: string, sellIds: string[], controlId: string) => void }) {
+  return <NetBars group="kind" rows={data.byKind.map(({ kind, ...group }) => ({ ...group, label: KIND_PLURAL[kind] }))} onOpen={onOpen} />;
 }
 
-export function NetBars({ rows, onOpen }: {
+export function NetBars({ group, rows, onOpen }: {
+  group: 'kind' | 'hold';
   rows: { label: string; count: number; net: number; sellIds: string[] }[];
-  onOpen: (label: string, sellIds: string[]) => void;
+  onOpen: (label: string, sellIds: string[], controlId: string) => void;
 }) {
   const largest = Math.max(0.01, ...rows.map((row) => Math.abs(row.net)));
   if (rows.length === 0) return null;
@@ -157,14 +158,15 @@ export function NetBars({ rows, onOpen }: {
       <div className="trow trow-axis" aria-hidden="true"><span>$0</span></div>
       {rows.map(({ label, count, net, sellIds }) => {
         const content = <>
-          <span className="trow-label">{label}<small>{plural(count, 'trade')}</small></span>
+          <span className="trow-label"><span>{label}</span><small>{plural(count, 'trade')}</small></span>
           <span className="ttrack" aria-hidden="true">
             {net !== 0 && <i className={net > 0 ? 'pos' : 'neg'} style={{ width: `${(Math.abs(net) / largest) * 50}%` }} />}
           </span>
           <span className={`n pl ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`}>{count ? formatSignedMoney(net) : '\u2014'}</span>
         </>;
         return count
-          ? <button key={label} className="trow analytics-row-link" onClick={() => onOpen(label, sellIds)}>{content}</button>
+          ? <button key={label} id={`analytics-${group}-${encodeURIComponent(label)}`} className="trow analytics-row-link"
+              onClick={(event) => onOpen(label, sellIds, event.currentTarget.id)}>{content}</button>
           : <div key={label} className="trow">{content}</div>;
       })}
     </div>

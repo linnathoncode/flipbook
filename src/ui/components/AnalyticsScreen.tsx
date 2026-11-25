@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import type { Journal } from '../../app/actions';
 import { analyze, ANALYTICS_PERIODS, type Analytics, type AnalyticsPeriod } from '../../domain/analytics';
 import { HOLDS_ID, OTHER_ID } from '../../domain/folders';
@@ -15,28 +16,44 @@ export interface AnalyticsDrilldown {
   label: string;
   period: string;
   sellIds: ReadonlySet<string>;
+  position: AnalyticsPosition;
   inspectSellId?: string;
+}
+
+export interface AnalyticsPosition {
+  scrollTop: number;
+  controlId: string;
 }
 
 interface Props {
   journal: Journal;
   sync: SyncProps;
   onOpenTrades: (drilldown: AnalyticsDrilldown) => void;
+  returnTo?: AnalyticsPosition;
 }
 
-export function AnalyticsScreen({ journal, sync, onOpenTrades }: Props) {
+export function AnalyticsScreen({ journal, sync, onOpenTrades, returnTo }: Props) {
+  const page = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    if (!returnTo || !page.current) return;
+    const control = document.getElementById(returnTo.controlId) as HTMLElement | SVGElement | null;
+    page.current.scrollTop = control ? returnTo.scrollTop : 0;
+    (control ?? heading.current)?.focus({ preventScroll: true });
+  }, [returnTo]);
   const [period, setPeriod] = usePreference<AnalyticsPeriod>('analytics-period', '90d');
   const { book } = journal.shelved;
   const now = new Date();
   const data = analyze(book.flips, book.openBuys, period, now);
   const closed = data.closed.length;
-  const openGroup = (label: string, sellIds: string[], inspectSellId?: string) => onOpenTrades({
+  const openGroup = (label: string, sellIds: string[], controlId: string, inspectSellId?: string) => onOpenTrades({
     label,
-    period: period === 'all' ? 'All time' : PERIOD_LABEL[period],
+    period: period === 'all' ? 'All time' : `Last ${PERIOD_LABEL[period]}`,
     sellIds: new Set(sellIds),
+    position: { scrollTop: page.current?.scrollTop ?? 0, controlId },
     inspectSellId,
   });
-  const openFlip = (flip: Flip) => openGroup(itemTitle(flip.sell.item, flip.sell.source).name, [flip.sell.id], flip.sell.id);
+  const openFlip = (flip: Flip, controlId: string) => openGroup(itemTitle(flip.sell.item, flip.sell.source).name, [flip.sell.id], controlId, flip.sell.id);
 
   return (
     <>
@@ -56,16 +73,16 @@ export function AnalyticsScreen({ journal, sync, onOpenTrades }: Props) {
           <Kpi label="Median hold" value={data.medianHeldDays === undefined ? '\u2014' : plural(data.medianHeldDays, 'day')} />
         </div>
       </header>
-      <div className="page analytics-page">
+      <div className="page analytics-page" ref={page}>
         {closed === 0 ? (
           <section className="card">
-            <h2>No dated sales in this period</h2>
+            <h2 ref={heading} tabIndex={-1}>No dated sales in this period</h2>
             <p className="note flush">Pick a longer period. Period results use recorded sale dates.</p>
           </section>
         ) : (
           <div className="analytics-grid">
             <section className="card">
-              <h2>Net profit over time</h2>
+              <h2 ref={heading} tabIndex={-1}>Net profit over time</h2>
               <p className="note">Dated sales on the Flips sheet, after fees.</p>
               <CumulativeChart data={data} />
             </section>
@@ -73,7 +90,7 @@ export function AnalyticsScreen({ journal, sync, onOpenTrades }: Props) {
             <section className="card">
               <h2>By month</h2>
               <p className="note">Select a month to view its trades.</p>
-              <MonthChart data={data} onOpen={({ month, sellIds }) => openGroup(`${formatMonth(month)} ${month.slice(0, 4)}`, sellIds)} />
+              <MonthChart data={data} onOpen={({ month, sellIds }, id) => openGroup(`${formatMonth(month)} ${month.slice(0, 4)}`, sellIds, id)} />
             </section>
             <section className="card">
               <h2>By item type</h2>
@@ -82,16 +99,16 @@ export function AnalyticsScreen({ journal, sync, onOpenTrades }: Props) {
             </section>
             <section className="card">
               <h2>Best flips</h2>
-              <FlipList flips={data.best} empty="No profitable flips in this period." onOpen={openFlip} />
+              <FlipList group="best" flips={data.best} empty="No profitable flips in this period." onOpen={openFlip} />
             </section>
             <section className="card">
               <h2>Biggest flops</h2>
-              <FlipList flips={data.worst} empty="No flops in this period." onOpen={openFlip} />
+              <FlipList group="worst" flips={data.worst} empty="No flops in this period." onOpen={openFlip} />
             </section>
             <section className="card span2">
               <h2>By holding time</h2>
-                <p className="note">Select a holding period to view its trades.</p>
-                <NetBars rows={data.byHold} onOpen={(label, sellIds) => openGroup(`Held ${label}`, sellIds)} />
+              <p className="note">Select a holding period to view its trades.</p>
+              <NetBars group="hold" rows={data.byHold} onOpen={(label, sellIds, id) => openGroup(`Held ${label}`, sellIds, id)} />
             </section>
           </div>
         )}
@@ -178,7 +195,9 @@ function Metric({ label, value, sign }: { label: string; value: string; sign?: n
   return <div><dt>{label}</dt><dd className={`pl ${signClass(sign)}`}>{value}</dd></div>;
 }
 
-function FlipList({ flips, empty, onOpen }: { flips: Flip[]; empty: string; onOpen: (flip: Flip) => void }) {
+function FlipList({ group, flips, empty, onOpen }: {
+  group: 'best' | 'worst'; flips: Flip[]; empty: string; onOpen: (flip: Flip, controlId: string) => void;
+}) {
   if (flips.length === 0) return <p className="note flush">{empty}</p>;
   return (
     <ol className="flist">
@@ -187,7 +206,7 @@ function FlipList({ flips, empty, onOpen }: { flips: Flip[]; empty: string; onOp
         const held = heldDays(flip);
         return (
           <li key={flip.sell.id}>
-            <button className="analytics-row-link" onClick={() => onOpen(flip)}>
+            <button id={`analytics-${group}-${flip.sell.id}`} className="analytics-row-link" onClick={(event) => onOpen(flip, event.currentTarget.id)}>
               <span className="nm">{title.detail ? `${title.name} (${title.detail})` : title.name} <span aria-hidden="true">›</span></span>
               <span className={`n pl ${signClass(flip.netProfit)}`}>{formatSignedMoney(flip.netProfit)}</span>
               <span className="s">{held === undefined ? '' : `Held ${plural(held, 'day')}, `}sold {formatDate(flip.sell.at)}</span>

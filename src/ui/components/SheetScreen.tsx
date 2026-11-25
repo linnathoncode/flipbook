@@ -47,7 +47,6 @@ interface Props {
   expandedKey?: string;
   detailsTrigger: RefObject<HTMLButtonElement>;
   onToggleDetails: (key: string) => void;
-  onCloseDetails: () => void;
   drilldown?: AnalyticsDrilldown;
   onBackToAnalytics: () => void;
   onClearDrilldown: () => void;
@@ -55,6 +54,7 @@ interface Props {
   folder?: Folder;
   /** Everything on this sheet, before filters. */
   rows: SheetRow[];
+  scopedRows: SheetRow[];
   /** Filtered and sorted. */
   shown: SheetRow[];
   hasSales: boolean;
@@ -75,15 +75,25 @@ interface Props {
 const WIDE_INSPECTOR = '(min-width: 1760px)';
 
 export function SheetScreen({
-  adaptive, expandedKey, detailsTrigger, onToggleDetails, onCloseDetails, drilldown, onBackToAnalytics, onClearDrilldown,
-  folder, rows, shown, hasSales, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag,
+  adaptive, expandedKey, detailsTrigger, onToggleDetails, drilldown, onBackToAnalytics, onClearDrilldown,
+  folder, rows, scopedRows, shown, hasSales, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag,
   onPickBuy, onFolderDeleted, onChange,
 }: Props) {
   const sheet = useRef<HTMLDivElement>(null);
-  const inspector = useRef<HTMLElement>(null);
-  const scope = useRef<HTMLDivElement>(null);
+  const inspectorHeading = useRef<HTMLHeadingElement>(null);
+  const backToAnalytics = useRef<HTMLButtonElement>(null);
+  const focusSearch = useRef(false);
+  const focusInspector = useRef(false);
+  const [excluding, setExcluding] = useState(false);
   const detailsId = useId();
-  useEffect(() => { if (drilldown) scope.current?.focus(); }, [drilldown]);
+  const scopeLabelId = useId();
+  useLayoutEffect(() => {
+    if (drilldown) backToAnalytics.current?.focus({ preventScroll: true });
+    else if (focusSearch.current) {
+      focusSearch.current = false;
+      sheet.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+    }
+  }, [drilldown]);
   const [wide, setWide] = useState(() => matchMedia(WIDE_INSPECTOR).matches);
   useEffect(() => {
     const query = matchMedia(WIDE_INSPECTOR);
@@ -100,14 +110,29 @@ export function SheetScreen({
   const holds = folder?.id === HOLDS_ID;
   const showInspector = adaptive && wide;
   const expandedRow = pageRows.find((row) => row.key === expandedKey);
+  useLayoutEffect(() => {
+    if (focusInspector.current) {
+      focusInspector.current = false;
+      inspectorHeading.current?.focus();
+    }
+  }, [expandedRow?.key]);
+
+  const toggleDetails = (key: string, fromButton?: boolean) => {
+    if (showInspector && fromButton && expandedRow?.key !== key) focusInspector.current = true;
+    onToggleDetails(key);
+  };
   const showFilters = () => {
     if (!showInspector) {
       view.toggleFilters();
       return;
     }
-    if (expandedRow) onToggleDetails(expandedRow.key);
-    inspector.current?.focus();
+    if (expandedRow) {
+      focusInspector.current = true;
+      onToggleDetails(expandedRow.key);
+    } else inspectorHeading.current?.focus();
   };
+  const filterControls = <Filters rows={scopedRows} filter={view.filter} onChange={view.setFilter}
+    excluding={excluding} setExcluding={setExcluding} />;
 
   return (
     <div className="sheet-workspace" ref={sheet} data-inspector={showInspector || undefined}>
@@ -115,11 +140,14 @@ export function SheetScreen({
         <FolderTitle folder={folder} rowCount={rows.length} sync={sync} onChange={onChange} onDeleted={onFolderDeleted} />
         <SheetNote folder={folder} />
         {drilldown ? (
-          <div className="analytics-scope" ref={scope} tabIndex={-1} aria-label="Analytics selection">
-            <div><strong>{drilldown.label}</strong><span className="hint">{drilldown.period} · {plural(drilldown.sellIds.size, 'trade')}</span></div>
-            <button className="btn" onClick={onBackToAnalytics}>‹ Analytics</button>
-            <button className="btn ghost" onClick={onClearDrilldown}>Clear Analytics filter</button>
-          </div>
+          <section className="analytics-scope" aria-labelledby={scopeLabelId}>
+            <div id={scopeLabelId}><strong>{drilldown.label}</strong><span className="hint">{plural(scopedRows.length, 'trade')} · {drilldown.period}</span></div>
+            <button className="btn" ref={backToAnalytics} aria-describedby={scopeLabelId} onClick={onBackToAnalytics}>‹ Analytics</button>
+            <button className="btn ghost" onClick={() => {
+              focusSearch.current = true;
+              onClearDrilldown();
+            }}>Clear Analytics filter</button>
+          </section>
         ) : (
           <div className={folder?.id === HOLDS_ID ? 'kpis holds-kpis' : 'kpis'}>
             <SheetKpis folder={folder} rows={rows} sync={sync} />
@@ -130,9 +158,9 @@ export function SheetScreen({
         <SelectionBar count={selection.count} onMoveMenu={onMoveMenu} moveMenuOpen={moveMenuOpen} onClear={selection.clear} />
       ) : (
         <Toolbar view={view} shown={shown.length} total={rows.length} holds={holds} hasSales={hasSales}
-          inspectorId={showInspector ? detailsId : undefined} filtersVisible={showInspector ? !expandedRow : view.filtersOpen} onFilters={showFilters} />
+          inspectorId={showInspector ? detailsId : undefined} filtersVisible={view.filtersOpen} onFilters={showFilters} />
       )}
-      {!showInspector && view.filtersOpen && <Filters rows={rows} filter={view.filter} onChange={view.setFilter} />}
+      {!showInspector && view.filtersOpen && filterControls}
       <div className="tablewrap" role="region" aria-label="Trade ledger" tabIndex={0}>
         <SheetTable
           rows={pageRows}
@@ -142,7 +170,7 @@ export function SheetScreen({
           detailsTrigger={detailsTrigger}
           detailsId={detailsId}
           inlineDetails={!showInspector}
-          onToggleDetails={onToggleDetails}
+          onToggleDetails={toggleDetails}
           detail={view.detail}
           showMarketPrices={holds}
           sort={view.sort}
@@ -164,15 +192,15 @@ export function SheetScreen({
       </div>
       {shown.length > SMALLEST_PAGE && <Pager view={view} page={page} pageCount={pageCount} total={shown.length} />}
       {showInspector && (
-        <aside className="sheet-inspector" id={detailsId} ref={inspector} tabIndex={-1}
+        <aside className="sheet-inspector" id={detailsId}
           aria-label={expandedRow ? 'Trade details' : 'Filters'}>
           <div className="sheet-inspector-header">
-            <h2>{expandedRow ? 'Trade details' : 'Filters'}</h2>
-            {expandedRow && <button className="btn ghost" onClick={onCloseDetails}>Back to filters</button>}
+            <h2 ref={inspectorHeading} tabIndex={-1}>{expandedRow ? 'Trade details' : 'Filters'}</h2>
+            {expandedRow && <button className="btn ghost" onClick={showFilters}>Back to filters</button>}
           </div>
           {expandedRow
             ? <TradeInspector row={expandedRow} showMarketPrices={holds} pricing={flipPricing} />
-            : <Filters rows={rows} filter={view.filter} onChange={view.setFilter} />}
+            : filterControls}
         </aside>
       )}
     </div>
@@ -431,7 +459,7 @@ function Toolbar({ view, shown, total, holds, hasSales, inspectorId, filtersVisi
           autoComplete="off"
         />
       </label>
-      <button className="btn" aria-expanded={filtersVisible} aria-controls={inspectorId ?? 'filters'} onClick={onFilters}>
+      <button className="btn" aria-expanded={inspectorId ? undefined : filtersVisible} aria-controls={inspectorId ?? 'filters'} onClick={onFilters}>
         <Icon name="filter" /> Filters{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
       </button>
       <SheetSort sort={view.sort} onSort={view.setSort} holds={holds} hasSales={hasSales} />
@@ -468,8 +496,10 @@ function SelectionBar({ count, onMoveMenu, moveMenuOpen, onClear }: SelectionBar
 }
 
 /** Only the kinds on this sheet get a chip. */
-function Filters({ rows, filter, onChange }: { rows: SheetRow[]; filter: ListFilter; onChange: (filter: ListFilter) => void }) {
-  const [excluding, setExcluding] = useState(false);
+function Filters({ rows, filter, onChange, excluding, setExcluding }: {
+  rows: SheetRow[]; filter: ListFilter; onChange: (filter: ListFilter) => void;
+  excluding: boolean; setExcluding: (value: boolean) => void;
+}) {
   const present = new Set(rows.map((row) => itemKind(row.item)));
   const kinds = ITEM_KINDS.filter((kind) => present.has(kind) || filter.kinds.includes(kind) || filter.excludedKinds.includes(kind));
   const hide = (event: MouseEvent, next: ListFilter) => {
@@ -488,9 +518,9 @@ function Filters({ rows, filter, onChange }: { rows: SheetRow[]; filter: ListFil
         <button
           key={kind}
           className={filter.excludedKinds.includes(kind) ? 'chip excluded' : 'chip'}
-          aria-pressed={excluding ? filter.excludedKinds.includes(kind) : filter.kinds.includes(kind)}
-          aria-label={filter.excludedKinds.includes(kind) ? `${KIND_PLURAL[kind]}, excluded` : undefined}
-          onClick={() => onChange(excluding ? toggleExcludedKind(filter, kind) : toggleKind(filter, kind))}
+          aria-pressed={filter.excludedKinds.includes(kind) || filter.kinds.includes(kind)}
+          aria-label={filter.excludedKinds.includes(kind) ? `Clear exclusion for ${KIND_PLURAL[kind]}` : undefined}
+          onClick={() => onChange(excluding || filter.excludedKinds.includes(kind) ? toggleExcludedKind(filter, kind) : toggleKind(filter, kind))}
           onContextMenu={(event) => hide(event, toggleExcludedKind(filter, kind))}
         >
           {KIND_PLURAL[kind]}{filter.excludedKinds.includes(kind) && <span aria-hidden="true"> ×</span>}
@@ -501,9 +531,9 @@ function Filters({ rows, filter, onChange }: { rows: SheetRow[]; filter: ListFil
         <button
           key={result.value}
           className={filter.excludedResults.includes(result.value) ? 'chip excluded' : 'chip'}
-          aria-pressed={excluding ? filter.excludedResults.includes(result.value) : filter.result === result.value}
-          aria-label={filter.excludedResults.includes(result.value) ? `${result.label}, excluded` : undefined}
-          onClick={() => onChange(excluding ? toggleExcludedResult(filter, result.value) : pickResult(filter, result.value))}
+          aria-pressed={filter.excludedResults.includes(result.value) || filter.result === result.value}
+          aria-label={filter.excludedResults.includes(result.value) ? `Clear exclusion for ${result.label}` : undefined}
+          onClick={() => onChange(excluding || filter.excludedResults.includes(result.value) ? toggleExcludedResult(filter, result.value) : pickResult(filter, result.value))}
           onContextMenu={(event) => hide(event, toggleExcludedResult(filter, result.value))}
         >
           {result.label}{filter.excludedResults.includes(result.value) && <span aria-hidden="true"> ×</span>}

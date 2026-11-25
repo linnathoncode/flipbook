@@ -32,7 +32,7 @@ interface Props {
   detailsTrigger: RefObject<HTMLButtonElement>;
   detailsId: string;
   inlineDetails: boolean;
-  onToggleDetails: (key: string) => void;
+  onToggleDetails: (key: string, fromButton?: boolean) => void;
   detail: RowDetail;
   showMarketPrices: boolean;
   sort: Sort;
@@ -286,7 +286,7 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
                   <div className="item-with-disclosure">
                     <button className="row-disclosure" ref={expanded ? detailsTrigger : undefined} title={expanded ? 'Close trade details' : 'Open trade details'}
                       aria-label={`Details for ${row.item.marketHashName}`} aria-expanded={expanded}
-                      aria-controls={expanded || !inlineDetails ? detailsId : undefined} onClick={() => onToggleDetails(row.key)}>
+                      aria-controls={expanded || !inlineDetails ? detailsId : undefined} onClick={() => onToggleDetails(row.key, true)}>
                       <span aria-hidden="true">›</span>
                     </button>
                     <ItemCell row={row} detailed={detailed} isNew={isNew} pricing={row.status === 'open' && !showMarketPrices ? flipPricing : undefined} />

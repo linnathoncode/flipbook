@@ -602,7 +602,7 @@ input {
 }
 
 .seg button[aria-pressed='true']:hover,
-.chip[aria-pressed='true']:hover {
+.chip[aria-pressed='true']:not(.excluded):hover {
   background: var(--cta-hover);
 }
 
@@ -737,10 +737,6 @@ input {
   padding: 14px 20px;
   border-inline-start: 1px solid var(--rule);
   background: var(--bg);
-}
-
-.sheet-inspector:focus-visible {
-  outline-offset: -2px;
 }
 
 .sheet-inspector-header {
@@ -2073,6 +2069,11 @@ a.market-link:active {
   cursor: pointer;
 }
 
+.chart-month-action .ch-axis:not(.ch-year) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .chart-month-hit {
   fill: transparent;
 }
@@ -2083,6 +2084,10 @@ a.market-link:active {
 
 .chart-month-action:focus-visible .chart-month-hit {
   stroke: var(--accent);
+}
+
+.chart-month-action:focus-visible {
+  outline: none;
 }
 
 .analytics-row-link {
@@ -2102,7 +2107,7 @@ a.market-link:active {
   padding: 4px 0;
 }
 
-.analytics-row-link .trow-label,
+.analytics-row-link .trow-label > span,
 .flist .analytics-row-link .nm {
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -2322,13 +2327,12 @@ a.market-link:active {
   }
 
   .nav {
-    flex-direction: row;
-    gap: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: start;
     padding: 0 6px;
     border-right: 0;
     border-bottom: 1px solid var(--rule);
-    overflow-x: auto;
-    overflow-y: hidden;
   }
 
   .brand,
@@ -2342,6 +2346,17 @@ a.market-link:active {
     flex-direction: row;
     gap: 3px;
     padding: 4px 3px;
+  }
+
+  .nav-sec:has(+ .nav-gap) {
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .nav-sec:has(+ .nav-gap) > * {
+    flex-shrink: 0;
   }
 
   .nav-foot {
@@ -2411,6 +2426,15 @@ a.market-link:active {
 }
 
 @media (max-width: 620px) {
+  .nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nav-sec:not(:has(+ .nav-gap)),
+  .nav-foot {
+    flex-wrap: wrap;
+  }
+
   .kpi {
     border-inline-start: 0;
     padding-inline: 0;
