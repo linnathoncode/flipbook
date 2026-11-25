@@ -34,6 +34,7 @@
   --sheet-totals-height: 36px;
   --sheet-pager-height: calc(var(--control-height) + 17px);
   --pad-y: 8px;
+  --control-easing: linear(0, 0.48 12.5%, 0.73 25%, 0.86 37.5%, 0.93 50%, 0.963 62.5%, 0.981 75%, 0.99 87.5%, 1);
 
   color-scheme: light;
 }
@@ -601,15 +602,14 @@ input {
 }
 
 .row-detail-toggle {
-  --detail-nudge: 0px;
-  --detail-offset: var(--detail-nudge);
+  --detail-offset: 0%;
   position: relative;
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .row-detail-toggle:has(> button:nth-child(2)[aria-pressed='true']) {
-  --detail-offset: calc(50% + 1px - var(--detail-nudge));
+  --detail-offset: calc(50% + 1px);
 }
 
 .row-detail-toggle > button[aria-pressed='true'],
@@ -631,18 +631,11 @@ input {
   color: var(--on-accent);
   background: var(--cta);
   clip-path: inset(0 calc(50% + 1px - var(--detail-offset)) 0 var(--detail-offset) round var(--radius));
-  transition: clip-path 210ms cubic-bezier(0.45, 0, 0.2, 1), background-color 120ms ease-out;
+  transition: clip-path 240ms var(--control-easing), background-color 120ms var(--control-easing);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .row-detail-toggle:has(> button:active:not([aria-pressed='true'])) {
-    --detail-nudge: 7px;
-  }
-
-  .row-detail-toggle:has(> button:active:not([aria-pressed='true'])) .row-detail-highlight {
-    background: var(--cta-press);
-    transition: clip-path 110ms cubic-bezier(0.16, 0.85, 0.3, 1), background-color 120ms ease-out;
-  }
+.row-detail-toggle:has(> button[aria-pressed='true']:hover) .row-detail-highlight {
+  background: var(--cta-hover);
 }
 
 @media (forced-colors: active) {
@@ -1999,7 +1992,7 @@ thead:hover .chk input {
   border-radius: 999px;
   background: var(--side);
   cursor: pointer;
-  transition: background-color 170ms ease-out, border-color 170ms ease-out;
+  transition: background-color 225ms var(--control-easing), border-color 225ms var(--control-easing);
 }
 
 .check input::before {
@@ -2009,7 +2002,7 @@ thead:hover .chk input {
   aspect-ratio: 1;
   border-radius: 50%;
   background: var(--muted);
-  transition: transform 170ms ease-out;
+  transition: transform 225ms var(--control-easing);
 }
 
 .check input:checked {
@@ -2182,7 +2175,8 @@ thead:hover .chk input {
 .seg button,
 .row td,
 .menu button {
-  transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out, transform 120ms ease-out;
+  transition: background-color 120ms var(--control-easing), color 120ms var(--control-easing),
+    border-color 120ms var(--control-easing), transform 120ms var(--control-easing);
 }
 
 .signal {
@@ -2226,27 +2220,7 @@ button:is(.btn, .chip):active:not(:disabled),
 
 .sprinkles span {
   position: absolute;
-  left: var(--x);
-  top: var(--y);
-  animation: sprinkle 530ms steps(13, end) both;
-}
-
-.sprinkles span:nth-child(1) { --x: 22%; --y: -8px; --dx: -4px; --dy: -9px; }
-.sprinkles span:nth-child(2) { --x: 73%; --y: -8px; --dx: 4px; --dy: -9px; }
-.sprinkles span:nth-child(3) { --x: 100%; --y: 20%; --dx: 9px; --dy: -4px; }
-.sprinkles span:nth-child(4) { --x: 100%; --y: 65%; --dx: 9px; --dy: 4px; }
-.sprinkles span:nth-child(5) { --x: 73%; --y: 100%; --dx: 4px; --dy: 9px; }
-.sprinkles span:nth-child(6) { --x: 22%; --y: 100%; --dx: -4px; --dy: 9px; }
-.sprinkles span:nth-child(7) { --x: -6px; --y: 65%; --dx: -9px; --dy: 4px; }
-.sprinkles span:nth-child(8) { --x: -6px; --y: 20%; --dx: -9px; --dy: -4px; }
-
-@keyframes sprinkle {
-  0% { opacity: 0; }
-  14% { opacity: 0.9; }
-  100% {
-    opacity: 0;
-    transform: translate(var(--dx), var(--dy));
-  }
+  translate: -50% -50%;
 }
 
 @keyframes rise {
