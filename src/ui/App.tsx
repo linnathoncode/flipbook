@@ -8,7 +8,7 @@ import { EMPTY_FILTER, filterRows, sectionRows, SORT_KEYS, sortRows, type ListFi
 import { AnalyticsScreen } from './components/AnalyticsScreen';
 import { MoveMenu, type MenuTarget } from './components/MoveMenu';
 import { ReviewScreen } from './components/ReviewScreen';
-import { SettingsPanel } from './components/SettingsPanel';
+import { SettingsPanel, type WideLayout } from './components/SettingsPanel';
 import { PAGE_SIZES, SheetScreen, sheetSortAvailable, type PageSize, type SheetView } from './components/SheetScreen';
 import { rowEntry, type RowDetail } from './components/SheetTable';
 import { Sidebar, type PlaceCounts } from './components/Sidebar';
@@ -40,6 +40,7 @@ export function App() {
   const [legacySort] = usePreference<Sort>('sheet-sort', DEFAULT_SORT);
   const [sorts, setSorts] = usePreference<Record<string, Sort>>('sheet-sorts', {});
   const [detail, setDetail] = usePreference<RowDetail>('row-detail', 'detailed');
+  const [wideLayout, setWideLayout] = usePreference<WideLayout>('wide-layout', 'adaptive');
   const [storedPageSize, setStoredPageSize] = usePreference<PageSize>('page-size', 25);
   const [page, setPage] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; trigger?: HTMLButtonElement }>();
@@ -203,7 +204,7 @@ export function App() {
   const selected = menu ? selectedRows() : [];
 
   return (
-    <div className={`fb ${selection.count > 0 ? 'has-sel' : ''}`} data-rows={detail}>
+    <div className={`fb ${selection.count > 0 ? 'has-sel' : ''}`} data-rows={detail} data-wide-layout={wideLayout}>
       <Sidebar
         place={current}
         onNavigate={navigate}
@@ -261,6 +262,8 @@ export function App() {
         {current.kind === 'analytics' && <AnalyticsScreen journal={journal} sync={syncProps} />}
         {current.kind === 'settings' && (
           <SettingsPanel
+            wideLayout={wideLayout}
+            onWideLayoutChange={setWideLayout}
             feeRate={journal.settings.feeRate}
             rules={journal.settings.rules}
             orphansToOther={journal.settings.orphansToOther}

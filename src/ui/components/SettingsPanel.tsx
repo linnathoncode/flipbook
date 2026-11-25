@@ -7,7 +7,11 @@ import { TitleBar, type SyncProps } from './TitleBar';
 
 const PERCENT = 100;
 
+export type WideLayout = 'adaptive' | 'centered';
+
 interface Props {
+  wideLayout: WideLayout;
+  onWideLayoutChange: (layout: WideLayout) => void;
   feeRate: number;
   rules: FolderRule[];
   orphansToOther: boolean;
@@ -17,7 +21,7 @@ interface Props {
   onChange: () => void;
 }
 
-export function SettingsPanel({ feeRate, rules, orphansToOther, listingsError, folders, sync, onChange }: Props) {
+export function SettingsPanel({ wideLayout, onWideLayoutChange, feeRate, rules, orphansToOther, listingsError, folders, sync, onChange }: Props) {
   const onFeeChange = (event: ChangeEvent<HTMLInputElement>) => {
     const percent = Number(event.target.value);
     if (Number.isFinite(percent) && percent >= 0) void updateFeeRate(percent / PERCENT).then(onChange);
@@ -30,6 +34,12 @@ export function SettingsPanel({ feeRate, rules, orphansToOther, listingsError, f
         <TitleBar title="Settings" {...sync} />
       </header>
       <div className="page settings">
+        <Row title="Wide-screen layout" hint="Adaptive fills the window. Centered keeps the workspace within 1,680 px.">
+          <div className="seg" role="group" aria-label="Wide-screen layout">
+            <button type="button" aria-pressed={wideLayout === 'adaptive'} onClick={() => onWideLayoutChange('adaptive')}>Adaptive</button>
+            <button type="button" aria-pressed={wideLayout === 'centered'} onClick={() => onWideLayoutChange('centered')}>Centered</button>
+          </div>
+        </Row>
         <Row
           title="Sync with CSFloat"
           hint="Happens on its own whenever a CSFloat tab loads, every 30 minutes while one is open, and when you open flipbook. It reads your history through the tab you're logged in to. flipbook never sees your password or an API key."
