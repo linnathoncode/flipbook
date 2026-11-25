@@ -40,7 +40,7 @@ export function TitleBar({ title, children, onSync, syncState, theme, onToggleTh
         <SyncLabel syncState={syncState} {...status} />
         <button className="btn pri" onClick={onSync} disabled={syncState.kind === 'syncing'}>Sync now</button>
         <button className="btn sq ghost" onClick={onToggleTheme} aria-label={themeLabel} title={themeLabel}>
-          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+          <span key={theme} className="theme-glyph"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></span>
         </button>
       </div>
     </div>

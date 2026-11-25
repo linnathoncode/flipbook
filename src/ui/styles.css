@@ -451,7 +451,8 @@ input {
   border-radius: var(--radius);
 }
 
-.field-sprinkle {
+.field-sprinkle,
+.toggle-control {
   position: relative;
   display: inline-flex;
   max-width: 100%;
@@ -772,6 +773,10 @@ input {
   color: var(--ink);
 }
 
+.sheet th button:active {
+  color: var(--accent);
+}
+
 .sheet td {
   padding: var(--pad-y) 10px;
   border-bottom: 1px solid var(--rule);
@@ -955,6 +960,8 @@ input {
     border-radius: var(--radius);
     background: var(--bg);
     color: var(--ink);
+    transform-origin: top left;
+    animation: pop 140ms var(--control-easing);
   }
 
   .sheet-sort select::picker-icon {
@@ -997,12 +1004,13 @@ input {
   cursor: pointer;
 }
 
-.row-disclosure span {
+.row-disclosure > span {
   font-size: 20px;
   line-height: 1;
+  transition: transform 180ms var(--control-easing);
 }
 
-.row-disclosure[aria-expanded='true'] span {
+.row-disclosure[aria-expanded='true'] > span {
   transform: rotate(90deg);
 }
 
@@ -1022,6 +1030,7 @@ input {
   grid-template-columns: repeat(auto-fit, minmax(108px, max-content));
   gap: 10px 24px;
   margin: 0;
+  animation: rise 160ms var(--control-easing);
 }
 
 .trade-details dt {
@@ -1087,6 +1096,11 @@ thead:hover .chk input {
   text-decoration: underline;
 }
 
+button.link:active:not(:disabled),
+a.market-link:active {
+  color: var(--accent);
+}
+
 .market-quotes {
   display: inline-flex;
   flex-direction: column;
@@ -1124,6 +1138,15 @@ thead:hover .chk input {
   opacity: 0.6;
   cursor: default;
   text-decoration: none;
+}
+
+.row-price-signal {
+  display: inline-flex;
+  align-items: center;
+}
+
+.buy-order-check .row-price-signal {
+  margin-inline-start: 4px;
 }
 
 .item-title {
@@ -1607,6 +1630,10 @@ thead:hover .chk input {
   outline: 2px solid var(--bg);
 }
 
+.toast button:hover {
+  background: color-mix(in srgb, var(--bg) 26%, transparent);
+}
+
 /* ---------- Hover card ---------- */
 
 /* The enlarged skin, sticker or charm with its full name, shown next to whatever is hovered. */
@@ -2024,6 +2051,10 @@ thead:hover .chk input {
   cursor: pointer;
 }
 
+.toggle-control {
+  flex: none;
+}
+
 .check input {
   appearance: none;
   position: relative;
@@ -2216,8 +2247,15 @@ thead:hover .chk input {
 .btn,
 .chip,
 .seg button,
+.search,
+.sheet-sort option,
+.sheet th button,
+.row-disclosure,
+.market-link,
+button.link,
 .row td,
-.menu button {
+.menu button,
+.toast button {
   transition: background-color 120ms var(--control-easing), color 120ms var(--control-easing),
     border-color 120ms var(--control-easing), transform 120ms var(--control-easing);
 }
@@ -2243,13 +2281,33 @@ thead:hover .chk input {
 }
 
 button:is(.btn, .nav-item, .chip),
-.seg button {
+.seg button,
+button:is(.market-price, .buy-order-check) {
   position: relative;
 }
 
 button:is(.btn, .chip):active:not(:disabled),
 .seg:not(.row-detail-toggle) button:active {
   transform: scale(0.96);
+}
+
+.nav-item:active:not(:disabled),
+.row-disclosure:active,
+.menu button:active,
+.toast button:active {
+  transform: scale(0.98);
+}
+
+.theme-glyph {
+  display: inline-flex;
+  animation: theme-glyph-in 180ms var(--control-easing);
+}
+
+@keyframes theme-glyph-in {
+  from {
+    opacity: 0.55;
+    transform: rotate(-16deg) scale(0.88);
+  }
 }
 
 .sprinkles {

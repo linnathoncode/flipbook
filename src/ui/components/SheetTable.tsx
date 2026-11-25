@@ -10,6 +10,7 @@ import { rarityColor } from '../rarity';
 import { steamImageUrl } from '../steamImages';
 import type { Entry, Selection } from '../useSelection';
 import { HoverCardProvider, useHoverCard, type CardContent } from './HoverCard';
+import { Signal } from './Signal';
 import { CONFIDENCE, isAfter, itemTitle, signClass, SortHeader } from './shared';
 
 export type RowDetail = 'compact' | 'detailed';
@@ -370,6 +371,7 @@ function MarketActions({ row, pricing }: { row: SheetRow; pricing?: FlipPricing 
         <button className="link market-link market-price" disabled={pricing.active !== undefined} onClick={() => pricing.onPrice(row)} title={priceHint}
           aria-label={busy ? `Pricing ${name}` : quote ? `Refresh price for ${name}` : `Price item: ${name}`}>
           <span aria-live="polite">{busy ? 'Pricing…' : quote ? 'Refresh prices' : 'Price item'}</span>
+          {busy && <span className="row-price-signal"><Signal compact /></span>}
           {quote && !busy && <span aria-hidden="true">↻</span>}
         </button>
       )}
@@ -390,8 +392,9 @@ function MarketPrices({ item, quote, onCheck, busy, disabled }: { item: Item; qu
       <span title={bid?.status === 'matched' ? `Highest buy order matching this item's attributes, before fees. Checked ${formatTimeAgo(bid.fetchedAt)}.` : bid ? 'Could not verify matching buy orders for this item. Check buy orders to try again.' : 'Buy orders are checked manually for this item.'}>
         <span className="market-quote-label">Insta sell</span> {bid || !onCheck ? instant : ''}
         {onCheck && <button className="link buy-order-check" onClick={onCheck} disabled={disabled}
-          aria-label={`${bid ? 'Refresh' : 'Check'} buy orders for ${item.marketHashName}`}>
-          {busy ? 'Checking…' : bid ? 'Refresh' : 'Check buy orders'}
+          aria-label={`${busy ? 'Checking' : bid ? 'Refresh' : 'Check'} buy orders for ${item.marketHashName}`}>
+          <span aria-live="polite">{busy ? 'Checking…' : bid ? 'Refresh' : 'Check buy orders'}</span>
+          {busy && <span className="row-price-signal"><Signal compact /></span>}
         </button>}
       </span>
     </span>

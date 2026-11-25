@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const CONTROLS = 'button:is(.btn, .nav-item, .chip), .seg button';
+const CONTROLS = 'button:is(.btn, .nav-item, .chip, .market-price, .buy-order-check), .seg button';
 const BURST_DURATION = 530;
 const FRAME_COUNT = 13;
 const DIRECTIONS = [
@@ -77,10 +77,17 @@ export function useSprinkles() {
       const field = event.target;
       if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) playField(field);
     };
+    const change = (event: Event) => {
+      const field = event.target;
+      if (!(field instanceof HTMLInputElement) || field.type !== 'checkbox' || field.disabled) return;
+      const anchor = field.closest<HTMLElement>('.toggle-control');
+      if (anchor) play(anchor);
+    };
 
     document.addEventListener('pointerdown', press, true);
     document.addEventListener('click', keyboard, true);
     document.addEventListener('focusin', focus);
+    document.addEventListener('change', change);
     motion.addEventListener('change', clear);
     return () => {
       clear();
@@ -88,6 +95,7 @@ export function useSprinkles() {
       document.removeEventListener('pointerdown', press, true);
       document.removeEventListener('click', keyboard, true);
       document.removeEventListener('focusin', focus);
+      document.removeEventListener('change', change);
     };
   }, []);
 }
