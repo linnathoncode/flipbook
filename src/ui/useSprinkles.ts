@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const CONTROLS = 'button:is(.btn, .nav-item, .chip), .seg button';
+const CONTROLS = 'button:is(.btn, .nav-item, .chip), .seg:not(.row-detail-toggle) button';
 const MARKS = ['+', '.', '+', '.', '+', '.', '+', '.'];
 
 export function useSprinkles() {

@@ -16,6 +16,8 @@ export type PageSize = (typeof PAGE_SIZES)[number];
 /** Below this many rows there's nothing to page through, so the pager stays hidden. */
 const SMALLEST_PAGE = PAGE_SIZES[0];
 
+const ROW_DETAILS = { detailed: 'Detailed', compact: 'Compact' } as const;
+
 const RESULTS: { value: ResultFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'open', label: 'Open' },
@@ -366,9 +368,13 @@ function Toolbar({ view, shown, total, holds, hasSales }: { view: SheetView; sho
       <SheetSort sort={view.sort} onSort={view.setSort} holds={holds} hasSales={hasSales} />
       <span className="count" aria-live="polite">{shown === total ? plural(total, 'row') : `${shown} of ${plural(total, 'row')}`}</span>
       <div className="tb-end">
-        <div className="seg" role="group" aria-label="Row detail">
-          <button aria-pressed={view.detail === 'detailed'} onClick={() => view.setDetail('detailed')}>Detailed</button>
-          <button aria-pressed={view.detail === 'compact'} onClick={() => view.setDetail('compact')}>Compact</button>
+        <div className="seg row-detail-toggle" role="group" aria-label="Row detail">
+          {(Object.keys(ROW_DETAILS) as RowDetail[]).map((mode) => (
+            <button key={mode} type="button" aria-pressed={view.detail === mode} onClick={() => view.setDetail(mode)}>{ROW_DETAILS[mode]}</button>
+          ))}
+          <span className="row-detail-highlight" aria-hidden="true">
+            {Object.values(ROW_DETAILS).map((label) => <span key={label}>{label}</span>)}
+          </span>
         </div>
       </div>
     </div>
