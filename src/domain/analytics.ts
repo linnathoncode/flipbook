@@ -8,6 +8,12 @@ export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number];
 const PERIOD_DAYS: Record<AnalyticsPeriod, number> = { '30d': 30, '90d': 90, all: Infinity };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANKED = 5;
+const HOLD_BUCKETS = [
+  { label: '0-7 days', max: 7 },
+  { label: '8-30 days', max: 30 },
+  { label: '31-90 days', max: 90 },
+  { label: '91+ days', max: Infinity },
+] as const;
 
 export interface Analytics {
   /** Start of the charted span: the period's start, or the first sale for "all". */
@@ -16,6 +22,14 @@ export interface Analytics {
   /** Closed flips sold in the period, oldest sale first. */
   closed: Flip[];
   net: number;
+  closedCost: number;
+  proceeds: number;
+  fees: number;
+  weightedReturn?: number;
+  medianHeldDays?: number;
+  outcomes: { profitable: number; flops: number; even: number; gains: number; losses: number };
+  topThreeGainShare?: number;
+  byHold: { label: string; net: number; count: number }[];
   winRate?: number;
   averagePercent?: number;
   averageHeldDays?: number;
@@ -44,13 +58,28 @@ export function analyze(flips: Flip[], openBuys: Trade[], period: AnalyticsPerio
   const cumulative = closed.map((flip) => ({ at: flip.sell.at, total: (running += flip.netProfit) }));
   const held = closed.map(heldDays).filter((days): days is number => days !== undefined);
   const byNet = [...closed].sort((a, b) => b.netProfit - a.netProfit);
+  const profitable = byNet.filter((flip) => Math.round(flip.netProfit * 100) > 0);
+  const flops = byNet.filter((flip) => Math.round(flip.netProfit * 100) < 0);
+  const gains = sumNet(profitable);
+  const closedCost = closed.reduce((sum, flip) => sum + flip.buyPrice, 0);
 
   return {
     from,
     to,
     closed,
     net: running,
-    winRate: closed.length ? closed.filter((flip) => flip.netProfit >= 0).length / closed.length : undefined,
+    closedCost,
+    proceeds: closed.reduce((sum, flip) => sum + flip.sellPrice, 0),
+    fees: closed.reduce((sum, flip) => sum + flip.fee, 0),
+    weightedReturn: closedCost > 0 ? (running / closedCost) * 100 : undefined,
+    medianHeldDays: median(held),
+    outcomes: {
+      profitable: profitable.length, flops: flops.length, even: closed.length - profitable.length - flops.length,
+      gains, losses: sumNet(flops),
+    },
+    topThreeGainShare: gains > 0 ? sumNet(profitable.slice(0, 3)) / gains : undefined,
+    byHold: groupByHold(closed),
+    winRate: closed.length ? (closed.length - flops.length) / closed.length : undefined,
     averagePercent: closed.length ? average(closed.map((flip) => flip.profitPercent)) : undefined,
     averageHeldDays: held.length ? average(held) : undefined,
     openCost: centsToDollars(openBuys.reduce((sum, buy) => sum + buy.priceCents, 0)),
@@ -60,8 +89,8 @@ export function analyze(flips: Flip[], openBuys: Trade[], period: AnalyticsPerio
       net: sumNet(closed.filter((flip) => flip.sell.at.startsWith(month))),
     })),
     byKind: groupByKind(closed),
-    best: byNet.slice(0, RANKED).filter((flip) => flip.netProfit > 0),
-    worst: byNet.slice(-RANKED).reverse().filter((flip) => flip.netProfit < 0),
+    best: profitable.slice(0, RANKED),
+    worst: flops.reverse().slice(0, RANKED),
   };
 }
 
@@ -75,6 +104,25 @@ export function monthsBetween(fromIso: string, toIso: string): string[] {
     [year, month] = month === 12 ? [year + 1, 1] : [year, month + 1];
   }
   return months;
+}
+
+function groupByHold(flips: Flip[]) {
+  const buckets = HOLD_BUCKETS.map(({ label }) => ({ label, count: 0, net: 0 }));
+  for (const flip of flips) {
+    const days = heldDays(flip);
+    if (days === undefined) continue;
+    const bucket = buckets[HOLD_BUCKETS.findIndex(({ max }) => days <= max)];
+    if (!bucket) continue;
+    bucket.count += 1;
+    bucket.net += flip.netProfit;
+  }
+  return buckets;
+}
+
+function median(values: number[]) {
+  if (!values.length) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  return (sorted[Math.floor((sorted.length - 1) / 2)] + sorted[Math.floor(sorted.length / 2)]) / 2;
 }
 
 function groupByKind(flips: Flip[]) {

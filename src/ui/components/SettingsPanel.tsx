@@ -32,12 +32,12 @@ export function SettingsPanel({ feeRate, rules, orphansToOther, listingsError, f
       <div className="page settings">
         <Row
           title="Sync with CSFloat"
-          hint="Happens on its own whenever a CSFloat tab loads, every 30 minutes while one is open, and when you open Flipbook. It reads your history through the tab you're logged in to. Flipbook never sees your password or an API key."
+          hint="Happens on its own whenever a CSFloat tab loads, every 30 minutes while one is open, and when you open flipbook. It reads your history through the tab you're logged in to. flipbook never sees your password or an API key."
         >
-          <button className="btn" onClick={sync.onSync}>Sync now</button>
+          <button className="btn" onClick={sync.onSync} disabled={sync.syncState.kind === 'syncing'}>Sync now</button>
         </Row>
         {listingsError && (
-          <Row title="Listings" hint={`Your trades synced, but Flipbook could not read what you have listed, so the Listed tags may be out of date. CSFloat said: ${listingsError}`}>
+          <Row title="Listings" hint={`Your trades synced, but flipbook could not read what you have listed, so the Listed tags may be out of date. CSFloat said: ${listingsError}`}>
             <span className="hint">Tries again on the next sync.</span>
           </Row>
         )}
@@ -58,7 +58,7 @@ export function SettingsPanel({ feeRate, rules, orphansToOther, listingsError, f
         </Row>
         <Row
           title="Folder rules"
-          hint="After you move items of one type into a folder, Flipbook offers to send new buys of that type there too. Items already on your sheets stay where they are."
+          hint="After you move items of one type into a folder, flipbook offers to send new buys of that type there too. Items already on your sheets stay where they are."
         >
           {rules.length === 0 ? (
             <span className="hint">No rules yet.</span>

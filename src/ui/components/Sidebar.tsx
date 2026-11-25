@@ -3,6 +3,7 @@ import { exportWorkbook } from '../../app/actions';
 import { errorText } from '../../app/sync';
 import type { Folder } from '../../domain/folders';
 import { isSamePlace, type Place } from '../places';
+import { Icon } from './Icon';
 import { NewFolderForm } from './NewFolderForm';
 
 const EXPORT_FILE_NAME = 'cs trades.xlsx';
@@ -30,6 +31,7 @@ export function Sidebar({ place, onNavigate, folders, counts, onDropRows, onFold
     <NavItem
       key={target.kind === 'folder' ? target.folderId : target.kind}
       label={label}
+      icon={target.kind}
       current={isSamePlace(place, target)}
       onClick={() => onNavigate(target)}
       onDrop={dropTo === undefined ? undefined : () => onDropRows(dropTo)}
@@ -41,8 +43,8 @@ export function Sidebar({ place, onNavigate, folders, counts, onDropRows, onFold
   return (
     <nav className="nav" aria-label="Sheets">
       <div className="brand">
-        <span className="logo" aria-hidden="true">F</span>
-        Flipbook
+        <img className="logo" src="./icons/48.png" alt="" />
+        flipbook
       </div>
       <div className="nav-sec">
         {item({ kind: 'flips' }, 'Flips', <Count n={counts.flips} />, null)}
@@ -58,7 +60,7 @@ export function Sidebar({ place, onNavigate, folders, counts, onDropRows, onFold
             onCancel={() => setCreating(false)}
           />
         ) : (
-          <button className="nav-item dim" onClick={() => setCreating(true)}>+ New folder</button>
+          <button className="nav-item dim" onClick={() => setCreating(true)}><Icon name="add" /> <span>New folder</span></button>
         )}
       </div>
       <div className="nav-gap" aria-hidden="true" />
@@ -76,6 +78,7 @@ export function Sidebar({ place, onNavigate, folders, counts, onDropRows, onFold
 
 interface NavItemProps {
   label: string;
+  icon: Place['kind'];
   current: boolean;
   onClick: () => void;
   /** Set on places rows can be dragged onto. */
@@ -83,7 +86,7 @@ interface NavItemProps {
   children?: ReactNode;
 }
 
-function NavItem({ label, current, onClick, onDrop, children }: NavItemProps) {
+function NavItem({ label, icon, current, onClick, onDrop, children }: NavItemProps) {
   const [over, setOver] = useState(false);
   // Dropping rows where they already are does nothing, so the current page isn't a target.
   const droppable = onDrop !== undefined && !current;
@@ -104,7 +107,8 @@ function NavItem({ label, current, onClick, onDrop, children }: NavItemProps) {
     : {};
   return (
     <button className={`nav-item ${over ? 'over' : ''}`} aria-current={current ? 'page' : undefined} onClick={onClick} {...dragProps}>
-      <span>{label}</span>
+      <Icon name={icon} />
+      <span title={label}>{label}</span>
       {children}
     </button>
   );
@@ -134,7 +138,8 @@ function ExportButton() {
     <>
       {status.error && <p className="nav-error" role="alert">{status.error}</p>}
       <button className="nav-item dim" onClick={download} disabled={status.busy}>
-        {status.busy ? 'Building spreadsheet…' : 'Export .xlsx'}
+        <Icon name="export" />
+        <span>{status.busy ? 'Building spreadsheet\u2026' : 'Export .xlsx'}</span>
       </button>
     </>
   );

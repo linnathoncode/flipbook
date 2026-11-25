@@ -9,9 +9,10 @@ import { AnalyticsScreen } from './components/AnalyticsScreen';
 import { MoveMenu, type MenuTarget } from './components/MoveMenu';
 import { ReviewScreen } from './components/ReviewScreen';
 import { SettingsPanel } from './components/SettingsPanel';
-import { PAGE_SIZES, SheetScreen, type PageSize, type SheetView } from './components/SheetScreen';
+import { PAGE_SIZES, SheetScreen, sheetSortAvailable, type PageSize, type SheetView } from './components/SheetScreen';
 import { rowEntry, type RowDetail } from './components/SheetTable';
 import { Sidebar, type PlaceCounts } from './components/Sidebar';
+import { Signal } from './components/Signal';
 import type { SyncProps } from './components/TitleBar';
 import { plural } from './format';
 import { isSheet, type Place } from './places';
@@ -19,6 +20,7 @@ import { useJournal } from './useJournal';
 import { useLastVisit } from './useLastVisit';
 import { usePreference } from './usePreference';
 import { useSelection, type Selection } from './useSelection';
+import { useSprinkles } from './useSprinkles';
 import { useTheme } from './useTheme';
 import { Toast, useToast } from './useToast';
 
@@ -27,6 +29,7 @@ const DEFAULT_SORT: Sort = { key: 'bought', descending: true };
 const FLIPS: MenuTarget = { id: null, name: 'Flips' };
 
 export function App() {
+  useSprinkles();
   const { journal, error, refresh, sync, refreshPrices, syncState, pricing } = useJournal();
   const [theme, toggleTheme] = useTheme();
   const lastVisit = useLastVisit();
@@ -36,7 +39,7 @@ export function App() {
   // The sort every sheet used before each kept its own; still the starting point for sheets never sorted.
   const [legacySort] = usePreference<Sort>('sheet-sort', DEFAULT_SORT);
   const [sorts, setSorts] = usePreference<Record<string, Sort>>('sheet-sorts', {});
-  const [detail, setDetail] = usePreference<RowDetail>('row-detail', 'compact');
+  const [detail, setDetail] = usePreference<RowDetail>('row-detail', 'detailed');
   const [storedPageSize, setStoredPageSize] = usePreference<PageSize>('page-size', 25);
   const [page, setPage] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; trigger?: HTMLButtonElement }>();
@@ -54,10 +57,12 @@ export function App() {
   const sheetKey = current.kind === 'folder' ? current.folderId : current.kind;
   // Preferences saved by an older version may name columns that no longer exist.
   const storedSort = sorts[sheetKey] ?? legacySort;
-  const sort = SORT_KEYS.includes(storedSort.key) ? storedSort : DEFAULT_SORT;
   // Only Holds gets priced; a price cached for the same item name would be stale anywhere else.
-  const prices = current.kind === 'folder' && current.folderId === HOLDS_ID ? journal?.prices : undefined;
+  const holds = current.kind === 'folder' && current.folderId === HOLDS_ID;
+  const prices = holds ? journal?.prices : undefined;
   const rows = section && journal ? sectionRows(section, journal.settings.feeRate, new Date(), { listed: journal.listed, prices }) : [];
+  const hasSales = rows.some((row) => row.status !== 'open');
+  const sort = SORT_KEYS.includes(storedSort.key) && sheetSortAvailable(storedSort.key, holds, hasSales) ? storedSort : DEFAULT_SORT;
   const shown = sortRows(filterRows(rows, filter), sort);
 
   useKeyboard({
@@ -69,8 +74,8 @@ export function App() {
     onSelectAll: isSheet(current) ? () => selection.setAll(shown.map(rowEntry), true) : undefined,
   });
 
-  if (error) return <main className="boot"><p className="sync err">{error}</p></main>;
-  if (!journal) return <main className="boot" aria-busy="true" />;
+  if (error) return <main className="boot"><p className="sync err" role="alert">{error}</p></main>;
+  if (!journal) return <main className="boot"><p className="sync has-signal" role="status"><Signal /> Loading journal</p></main>;
 
   const navigate = (next: Place) => {
     selection.clear();
@@ -175,7 +180,7 @@ export function App() {
     await Promise.all(paired.map((row) => releaseManualMatch(row.sell!.id)));
     selection.clear();
     await refresh();
-    show({ text: `Unpaired ${plural(paired.length, 'sale')}. Flipbook will match ${paired.length === 1 ? 'it' : 'them'} again.` });
+    show({ text: `Unpaired ${plural(paired.length, 'sale')}. flipbook will match ${paired.length === 1 ? 'it' : 'them'} again.` });
   };
 
   const onRowMenu = (event: MouseEvent, row: SheetRow) => {
@@ -217,6 +222,7 @@ export function App() {
             folder={folder}
             rows={rows}
             shown={shown}
+            hasSales={hasSales}
             view={view}
             selection={selection}
             newSince={lastVisit}
@@ -226,7 +232,7 @@ export function App() {
               setMenu(menu?.trigger ? undefined : { x: box.left, y: box.bottom + 4, trigger });
             }}
             moveMenuOpen={Boolean(menu?.trigger)}
-            flipPricing={current.kind === 'flips' || current.kind === 'folder' && current.folderId === HOLDS_ID ? {
+            flipPricing={current.kind === 'flips' || holds ? {
               active: pricingFlip, requested: pricedFlips, quotes: journal.prices, onPrice: (row) => void priceFlip(row),
             } : undefined}
             onRowMenu={onRowMenu}
@@ -252,7 +258,7 @@ export function App() {
             onOpenOther={() => navigate({ kind: 'folder', folderId: OTHER_ID })}
           />
         )}
-        {current.kind === 'analytics' && <AnalyticsScreen book={journal.shelved.book} feeRate={journal.settings.feeRate} sync={syncProps} />}
+        {current.kind === 'analytics' && <AnalyticsScreen journal={journal} sync={syncProps} />}
         {current.kind === 'settings' && (
           <SettingsPanel
             feeRate={journal.settings.feeRate}

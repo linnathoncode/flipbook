@@ -123,7 +123,7 @@ async function fetchListingPagesInPage(steamId: string, pageSize: number, maxPag
     const body = (await response.json()) as unknown;
     if (Array.isArray(body)) return { value: [...listings, ...body] };
     const { data, cursor: next } = (body ?? {}) as { data?: unknown[]; cursor?: string };
-    if (!Array.isArray(data)) return { error: 'CSFloat sent listings in a shape Flipbook does not know.' };
+    if (!Array.isArray(data)) return { error: 'CSFloat sent listings in a shape flipbook does not know.' };
     listings.push(...data);
     if (!next || next === cursor || data.length < pageSize) return { value: listings };
     cursor = next;

@@ -1,4 +1,4 @@
-# Flipbook
+# flipbook
 
 A Chrome extension that keeps a trade journal for your CSFloat account. It pairs each item you sold with the buy it came from,
 and shows what every flip made after fees.
@@ -24,22 +24,22 @@ Other Chromium browsers like Edge or Brave should work the same way.
 2. Open `chrome://extensions` in Chrome.
 3. Turn on **Developer mode** (top right).
 4. Click **Load unpacked** and choose the `dist` folder.
-5. Pin Flipbook from the puzzle-piece menu so its red icon stays in the toolbar.
+5. Pin flipbook from the puzzle-piece menu so its red icon stays in the toolbar.
 
 ## First run
 
 1. Log in to [csfloat.com](https://csfloat.com) in the same Chrome profile.
-2. Click the Flipbook icon. It opens in its own tab and starts reading your trade history from CSFloat.
+2. Click the flipbook icon. It opens in its own tab and starts reading your trade history from CSFloat.
    If no CSFloat tab is open, it opens one for you. Leave that tab open until the sync finishes.
 3. Your trades show up on the **Flips** sheet. Each sale is paired with its buy, and anything you haven't sold yet shows as Open.
 
-After that, Flipbook syncs on its own whenever a CSFloat tab loads, every 30 minutes while one is open,
-and when you open Flipbook. **Sync now** at the top forces a sync.
+After that, flipbook syncs on its own whenever a CSFloat tab loads, every 30 minutes while one is open,
+and when you open flipbook. **Sync now** at the top forces a sync.
 
 ## Using it
 
 Everything you buy lands on top of **Flips**. Open buys show "Open" until they sell, then the row fills in with
-the sale, the fee, net profit and profit %. Wins get a green edge and losses a red one.
+the sale, the fee, net profit and profit %. Lights at the left edge of each row and bars in Profit % show profitable flips and flops. The percentage stays visible when a bar fills at a 20% gain or loss.
 
 Not every trade is a flip, so the sidebar has two more folders:
 
@@ -50,7 +50,7 @@ Not every trade is a flip, so the sidebar has two more folders:
 To move rows, select them and use **Move to**, right-click a row, or drag rows onto a folder in the sidebar.
 **+ New folder** adds your own, and moving works between any two folders.
 
-After a move, Flipbook may offer a rule like "Always send new stickers to Holds". Rules only apply to buys made after
+After a move, flipbook may offer a rule like "Always send new stickers to Holds". Rules only apply to buys made after
 you create them, and anything you move by hand stays where you put it. Settings lists your rules so you can remove them.
 
 More things you can do:
@@ -66,10 +66,10 @@ More things you can do:
   listing in the row as an estimate, separate from your realized profit.
 - **Worth now** on Holds prices each held item at its cheapest CSFloat listing, and **If sold now** is what that nets
   after the fee. Prices are cached: 6 hours, or 1 hour for items over $100. **Refresh prices** skips anything priced in
-  the last 5 minutes, and if CSFloat rate-limits the lookups, Flipbook waits 30 minutes before asking again.
+  the last 5 minutes, and if CSFloat rate-limits the lookups, flipbook waits 30 minutes before asking again.
   While prices come in, a small book turns one page per price and each row fills in as its price lands.
   The Holds table shows sortable **Now** and **If sold now** columns.
-- **Filters** narrows by item type and result (open, listed, wins, losses). Right-click a filter to hide that type or
+- **Filters** narrows by item type and result (open, listed, flips, flops). Right-click a filter to hide that type or
   result instead; it turns red. Click a column header or use **Sort by**, which also lists fields in the trade details.
   Each sheet remembers its own sort.
 - **Rows per page** sets the page size (25, 50, 100 or all).
@@ -100,12 +100,12 @@ npm install
 npm run build
 ```
 
-Then click the reload arrow on Flipbook in `chrome://extensions`. Your data is kept.
+Then click the reload arrow on flipbook in `chrome://extensions`. Your data is kept.
 
 ## Problems
 
 - **Sync fails or finds nothing:** make sure you're logged in to csfloat.com in the same Chrome profile, then open a CSFloat tab and click **Sync now**.
-  Any error shows at the top of Flipbook.
+  Any error shows at the top of flipbook.
 - **A sale isn't paired:** it was probably bought outside CSFloat, or before your CSFloat history starts. It'll be in **Other**.
   If it was a real flip, move it back to Flips.
 - **No stickers or charms in the trade details:** they come in with the next sync.
@@ -113,10 +113,10 @@ Then click the reload arrow on Flipbook in `chrome://extensions`. Your data is k
 
 ## Your data
 
-Flipbook reads your trades through the CSFloat tab you're already logged in to. It never sees your password and never stores a key or token.
+flipbook reads your trades through the CSFloat tab you're already logged in to. It never sees your password and never stores a key or token.
 Your journal is stored in the browser on this computer only, and your trades are never sent anywhere else.
 
-Item images load from Steam's image server, the same one CSFloat uses. Steam sees which images you load, not who you are on Flipbook.
+Item images load from Steam's image server, the same one CSFloat uses. Steam sees which images you load, not who you are on flipbook.
 
 **Removing the extension deletes your journal.** Export to .xlsx first if you want to keep it.
 
@@ -149,4 +149,4 @@ Store updates install on their own and keep the journal in IndexedDB. If a relea
 
 Skin float ranges come from [ByMykel/CSGO-API](https://github.com/ByMykel/CSGO-API), MIT License, Copyright (c) 2023 ByMykel.
 
-Flipbook isn't affiliated with CSFloat or Valve.
+flipbook isn't affiliated with CSFloat or Valve.

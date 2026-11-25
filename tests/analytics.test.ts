@@ -25,6 +25,21 @@ describe('analyze', () => {
     expect(data.openCost).toBe(25);
   });
 
+  it('weights the realized return by cost and groups net profit by hold time', () => {
+    const biggerLoss = flip('2026-10-01T00:00:00Z', '2026-10-05T00:00:00Z', 2000, 1700, sticker());
+    const data = analyze([win, biggerLoss], [open], '90d', NOW);
+    expect(data.closedCost).toBe(30);
+    expect(data.proceeds).toBe(32);
+    expect(data.weightedReturn).toBeCloseTo(100 * 2 / 30);
+    expect(data.outcomes).toEqual({ profitable: 1, flops: 1, even: 0, gains: 5, losses: -3 });
+    expect(data.topThreeGainShare).toBe(1);
+    expect(data.medianHeldDays).toBe(7);
+    expect(data.byHold.slice(0, 2)).toEqual([
+      { label: '0-7 days', count: 1, net: -3 },
+      { label: '8-30 days', count: 1, net: 5 },
+    ]);
+  });
+
   it('keeps a running total in sale order', () => {
     const data = analyze([loss, win], [], '90d', NOW);
     expect(data.cumulative.map((point) => point.total)).toEqual([5, 3]);

@@ -1,6 +1,6 @@
 import type { Analytics } from '../../domain/analytics';
 import { KIND_PLURAL } from '../../domain/itemKinds';
-import { formatMonth, formatSignedMoney } from '../format';
+import { formatMonth, formatSignedMoney, plural, roundTo } from '../format';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUS = '−';
@@ -78,6 +78,7 @@ export function MonthChart({ data }: { data: Analytics }) {
   // The first bar names its year too, unless a January right after it would collide with that label.
   const firstJanuary = data.byMonth.findIndex((month) => monthOf(month.month) === 0);
   const firstJanuaryGap = firstJanuary === -1 ? Infinity : firstJanuary;
+  const monthsWithSales = new Set(data.closed.map((flip) => flip.sell.at.slice(0, 7)));
 
   return (
     <svg className="chart" style={{ maxWidth: width * CHART_STRETCH }} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Net profit by month">
@@ -89,16 +90,22 @@ export function MonthChart({ data }: { data: Analytics }) {
       ))}
       {data.byMonth.map((month, index) => {
         const center = left + band * index + band / 2;
-        const barTop = y(Math.max(month.net, 0));
-        const barHeight = Math.max(1, Math.abs(y(month.net) - y(0)));
+        const net = roundTo(month.net, 2);
+        const barTop = y(Math.max(net, 0));
+        const barHeight = Math.abs(y(net) - y(0));
         return (
           <g key={month.month}>
-            <rect className={month.net >= 0 ? 'ch-pos' : 'ch-neg'} x={center - barWidth / 2} y={barTop} width={barWidth} height={barHeight} rx={2}>
-              <title>{`${formatMonth(month.month)}: ${formatSignedMoney(month.net)}`}</title>
-            </rect>
-            {labelled && month.net !== 0 && (
-              <text className="ch-lbl" x={center} y={month.net >= 0 ? barTop - 6 : barTop + barHeight + 13} textAnchor="middle">
-                {formatSignedMoney(month.net)}
+            {net !== 0 && (
+              <rect className={net > 0 ? 'ch-pos' : 'ch-neg'} x={center - barWidth / 2} y={barTop} width={barWidth} height={Math.max(1, barHeight)} rx={2}>
+                <title>{`${formatMonth(month.month)}: ${formatSignedMoney(net)}`}</title>
+              </rect>
+            )}
+            {net === 0 && monthsWithSales.has(month.month) && (
+              <circle className="ch-neutral" cx={center} cy={y(0)} r={2.5}><title>{formatMonth(month.month)}: $0.00 net</title></circle>
+            )}
+            {labelled && net !== 0 && (
+              <text className="ch-lbl" x={center} y={net > 0 ? barTop - 6 : barTop + barHeight + 13} textAnchor="middle">
+                {formatSignedMoney(net)}
               </text>
             )}
             {monthOf(month.month) % step === 0 && (
@@ -126,16 +133,23 @@ function monthStep(band: number): number {
 const monthOf = (month: string) => Number(month.slice(5, 7)) - 1;
 
 export function KindBars({ data }: { data: Analytics }) {
-  const largest = Math.max(0.01, ...data.byKind.map((group) => Math.abs(group.net)));
+  return <NetBars rows={data.byKind.map(({ kind, count, net }) => ({ label: KIND_PLURAL[kind], count, net }))} />;
+}
+
+export function NetBars({ rows }: { rows: { label: string; count: number; net: number }[] }) {
+  const largest = Math.max(0.01, ...rows.map((row) => Math.abs(row.net)));
+  if (rows.length === 0) return null;
+
   return (
     <div className="trows">
-      {data.byKind.map((group) => (
-        <div key={group.kind} className="trow">
-          <span>{KIND_PLURAL[group.kind]}</span>
-          <div className="ttrack">
-            <i className={group.net >= 0 ? 'pos' : 'neg'} style={{ width: `${Math.max(2, (Math.abs(group.net) / largest) * 100)}%` }} />
+      <div className="trow trow-axis" aria-hidden="true"><span>$0</span></div>
+      {rows.map(({ label, count, net }) => (
+        <div key={label} className="trow">
+          <span className="trow-label">{label}<small>{plural(count, 'trade')}</small></span>
+          <div className="ttrack" aria-hidden="true">
+            {net !== 0 && <i className={net > 0 ? 'pos' : 'neg'} style={{ width: `${(Math.abs(net) / largest) * 50}%` }} />}
           </div>
-          <span className={`n pl ${group.net >= 0 ? 'pos' : 'neg'}`}>{formatSignedMoney(group.net)}</span>
+          <span className={`n pl ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`}>{count ? formatSignedMoney(net) : '\u2014'}</span>
         </div>
       ))}
     </div>

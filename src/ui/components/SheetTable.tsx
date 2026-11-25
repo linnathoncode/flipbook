@@ -1,11 +1,11 @@
-import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
 import { adjustedFloat, floatRange, type FloatRange } from '../../domain/floatRanges';
 import { totalRows, type ListedFor, type PricedAt, type SheetRow, type Sort } from '../../domain/listFilters';
 import { itemPriceKey, type PriceQuote } from '../../domain/prices';
 import { centsToDollars } from '../../domain/profit';
 import type { Item } from '../../domain/types';
 import { CSFLOAT_ORIGIN } from '../../io/csfloatSync';
-import { formatDate, formatDays, formatFloat, formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
+import { formatDate, formatDays, formatFloat, formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural, roundTo } from '../format';
 import { rarityColor } from '../rarity';
 import { steamImageUrl } from '../steamImages';
 import type { Entry, Selection } from '../useSelection';
@@ -26,6 +26,7 @@ interface Props {
   rows: SheetRow[];
   /** Every row that passed the filters; the totals cover all of them, not just this page. */
   allRows: SheetRow[];
+  hasSales: boolean;
   detail: RowDetail;
   showMarketPrices: boolean;
   sort: Sort;
@@ -42,28 +43,96 @@ interface Props {
 
 export const rowEntry = (row: SheetRow): Entry => ({ key: row.key, tradeIds: row.tradeIds });
 
+const PROFIT_BAR_LIMIT = 20;
 const HOLD_MS = 450;
 const HOLD_SLOP = 8;
 const isControl = (target: EventTarget) => target instanceof Element && Boolean(target.closest('button, a, input'));
 
-export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSort, selection, newSince, flipPricing, empty, onRowMenu, onRowDrag, onPickBuy }: Props) {
-  const detailed = detail === 'detailed';
-  const [lastDateKey, setLastDateKey] = useState<'bought' | 'sold'>('bought');
-  const dateKey = sort.key === 'bought' || sort.key === 'sold' ? sort.key : lastDateKey;
+const ENTRY_STAGGER_MS = 155;
+const ENTRY_WINDOW_MS = 950;
+const ENTRY_MARKS = ['*+*', '+.+', '.*.', '.+.'];
+const ENTRY_GLYPH_HEIGHT = 8;
+
+function tradeOutcome(row: SheetRow) {
+  const net = row.status === 'closed' ? roundTo(row.net ?? 0, 2) : 0;
+  return net > 0 ? 'gain' : net < 0 ? 'loss' : undefined;
+}
+
+function useOutcomeEntry(table: RefObject<HTMLTableElement>, rows: SheetRow[]) {
+  const initialRows = useRef(rows);
+  const [intro, setIntro] = useState<{
+    visibleRows: { key: string; index: number }[];
+    byKey: Map<string, { delay: number; lines: number }>;
+    last: string;
+  }>();
+  useLayoutEffect(() => {
+    const motion = matchMedia('(prefers-reduced-motion: reduce)');
+    const element = table.current;
+    const scrollport = element?.closest('.tablewrap');
+    if (motion.matches || !element || !scrollport) return;
+
+    const { top, bottom } = scrollport.getBoundingClientRect();
+    const totalsTop = element.tFoot?.rows[0]?.cells[0]?.getBoundingClientRect().top ?? bottom;
+    const visible = Math.min(totalsTop, bottom);
+    const visibleRows = [...element.querySelectorAll('tbody > .row')].flatMap((element, index) => {
+      const row = initialRows.current[index];
+      const rect = element.getBoundingClientRect();
+      return row && rect.top < visible && rect.bottom > top ? [{ row, index, height: rect.height }] : [];
+    });
+    const entries = visibleRows.filter(({ row }) => tradeOutcome(row));
+    const last = entries.at(-1)?.row.key;
+    if (!last) return;
+
+    const stagger = Math.min(ENTRY_STAGGER_MS, Math.floor(ENTRY_WINDOW_MS / Math.max(1, entries.length - 1)));
+    setIntro({
+      visibleRows: visibleRows.map(({ row, index }) => ({ key: row.key, index })),
+      byKey: new Map(entries.map(({ row, height }, index) => [
+        row.key,
+        { delay: index * stagger, lines: Math.max(3, Math.floor((height - 4) / ENTRY_GLYPH_HEIGHT)) },
+      ])),
+      last,
+    });
+
+    const handleMotion = () => { if (motion.matches) setIntro(undefined); };
+    motion.addEventListener('change', handleMotion);
+    return () => motion.removeEventListener('change', handleMotion);
+  }, [table]);
+
+  const current = intro?.visibleRows.every(({ key, index }) => rows[index]?.key === key) ? intro : undefined;
   useEffect(() => {
-    if (sort.key === 'bought' || sort.key === 'sold') setLastDateKey(sort.key);
-  }, [sort.key]);
+    if (intro && !current) setIntro(undefined);
+  }, [intro, current]);
+
+  return { entry: current, finish: () => setIntro(undefined) };
+}
+
+export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, sort, onSort, selection, newSince, flipPricing, empty, onRowMenu, onRowDrag, onPickBuy }: Props) {
+  const detailed = detail === 'detailed';
+  const table = useRef<HTMLTableElement>(null);
+  const { entry: outcomeEntry, finish: finishOutcomeEntry } = useOutcomeEntry(table, rows);
   const [expandedKey, setExpandedKey] = useState<string>();
   const detailsId = useId();
   const hold = useRef<{ pointer: number; x: number; y: number; timer: ReturnType<typeof setTimeout> }>();
   const suppressClick = useRef(false);
   const visible = rows.map(rowEntry);
-  const totals = totalRows(allRows);
+  const closedRows = allRows.filter((row) => row.status === 'closed');
+  const saleRows = allRows.filter((row) => row.status === 'sale');
+  const pricedRows = showMarketPrices ? allRows.filter((row) => row.quote !== undefined) : [];
+  const summaryRows = closedRows.length ? closedRows : saleRows.length ? saleRows : pricedRows.length ? pricedRows : allRows;
+  const totals = totalRows(summaryRows);
+  const summaryLabel = closedRows.length
+    ? `${closedRows.length} closed`
+    : saleRows.length
+      ? plural(saleRows.length, 'unpaired sale')
+      : pricedRows.length
+        ? `${pricedRows.length} priced`
+        : plural(allRows.length, 'row');
+  const summaryScope = summaryRows.length < allRows.length ? ` of ${plural(allRows.length, 'row')}` : '';
   const header = { sort, onSort };
-  // Holds are mostly unsold: the sale columns step aside for today's price, and a sheet of flips never shows price columns.
-  const sold = allRows.some((row) => row.status !== 'open');
   // A listing alone doesn't add the price columns; on sheets without them it shows in the Net column.
-  const columnCount = 6 + (sold ? 3 : 0) + (showMarketPrices ? 2 : 0);
+  const showNet = !showMarketPrices || hasSales;
+  const leadingColumns = 4 + Number(hasSales) + Number(showMarketPrices);
+  const columnCount = leadingColumns + 1 + (hasSales ? 3 : 0) + (showMarketPrices ? 2 : 0) + Number(showNet);
 
   const cancelHold = (pointer?: number) => {
     const pending = hold.current;
@@ -95,6 +164,7 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
   return (
     <HoverCardProvider>
     <table
+      ref={table}
       className="sheet"
       onPointerDownCapture={(event) => {
         if (!event.isPrimary) return;
@@ -111,20 +181,11 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
       <thead>
         <tr>
           <th className="chk"><PageCheck visible={visible} selection={selection} /></th>
-          <th className="n" scope="col" aria-sort={sort.key === dateKey ? (sort.descending ? 'descending' : 'ascending') : undefined}>
-            <div className="date-column-switch" role="group" aria-label="Date column">
-              {(['bought', 'sold'] as const).map((key) => (
-                <button key={key} aria-pressed={dateKey === key}
-                  title={`Show and sort by ${key} date${sort.key === key ? (sort.descending ? ', oldest first' : ', newest first') : ', newest first'}`}
-                  onClick={() => onSort({ key, descending: sort.key === key ? !sort.descending : true })}>
-                  {key === 'bought' ? 'Bought' : 'Sold'}
-                  {sort.key === key && (sort.descending ? ' ↓' : ' ↑')}
-                </button>
-              ))}
-            </div>
-          </th>
+          <SortHeader label="Bought" sortKey="bought" numeric {...header} />
+          {hasSales && <SortHeader label="Sold" sortKey="sold" numeric {...header} />}
           <SortHeader label="Item" sortKey="name" {...header} />
           <SortHeader label="Float" sortKey="float" numeric {...header} />
+          {showMarketPrices && <SortHeader label="Days held" sortKey="held" numeric {...header} />}
           <SortHeader label="Buy" sortKey="buyPrice" numeric {...header} />
           {showMarketPrices && (
             <>
@@ -132,14 +193,14 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
               <SortHeader label="If sold now" sortKey="nowNet" numeric title="Estimated profit at that price after fees" {...header} />
             </>
           )}
-          {sold && (
+          {hasSales && (
             <>
               <SortHeader label="Sell" sortKey="sellPrice" numeric {...header} />
               <th className="n" scope="col">Fee</th>
             </>
           )}
-          <SortHeader label="Net profit" sortKey="net" numeric {...header} />
-          {sold && <SortHeader label="Profit %" sortKey="percent" numeric {...header} />}
+          {showNet && <SortHeader label="Net profit" sortKey="net" numeric {...header} />}
+          {hasSales && <SortHeader label="Profit %" sortKey="percent" numeric title={detailed ? `Bars fill at a gain or loss of ${PROFIT_BAR_LIMIT}%` : undefined} {...header} />}
         </tr>
       </thead>
       <tbody>
@@ -152,7 +213,8 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
           const entry = visible[index];
           const selected = selection.has(row.key);
           const expanded = expandedKey === row.key;
-          const result = row.net === undefined ? '' : row.net >= 0 ? 'win' : 'loss';
+          const outcome = tradeOutcome(row);
+          const entryAnimation = outcome ? outcomeEntry?.byKey.get(row.key) : undefined;
           const isNew = isAfter(row.boughtAt, newSince) || isAfter(row.soldAt, newSince);
           const clickRow = (event: MouseEvent) => {
             if (isControl(event.target)) return;
@@ -166,8 +228,14 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
           return (
             <Fragment key={row.key}>
               <tr
-                className={`row ${row.status} ${result} ${selected ? 'sel' : ''} ${expanded ? 'expanded' : ''}`}
+                className={`row ${row.status} ${selected ? 'sel' : ''} ${expanded ? 'expanded' : ''}`}
                 aria-selected={selected}
+                data-outcome={outcome}
+                data-outcome-entry={entryAnimation ? true : undefined}
+                style={entryAnimation ? { '--entry-delay': `${entryAnimation.delay}ms` } as CSSProperties : undefined}
+                onAnimationEnd={row.key === outcomeEntry?.last ? (event) => {
+                  if (event.animationName === 'outcome-light') finishOutcomeEntry();
+                } : undefined}
                 draggable
                 onPointerDown={(event) => startHold(event, entry)}
                 onPointerMove={movePointer}
@@ -194,11 +262,22 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
                 onClick={clickRow}
               >
                 <td className="chk">
+                  {entryAnimation && (
+                    <span className="outcome-ascii" aria-hidden="true">
+                      {ENTRY_MARKS.map((column) => (
+                        <span key={column}>
+                          {Array.from({ length: detailed ? entryAnimation.lines : column.length }, (_, index) => (
+                            <span key={index}>{column[index % column.length]}</span>
+                          ))}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                   <input type="checkbox" checked={selected} onChange={() => selection.click(entry, { add: true, range: false }, visible)} aria-label={`Select ${row.item.marketHashName}`} />
                 </td>
-                <td className="n m">{formatDate(dateKey === 'bought' ? row.boughtAt : row.soldAt) || (
-                  <span aria-label={dateKey === 'sold' ? 'Not sold' : 'No buy on record'} title={dateKey === 'sold' ? 'Not sold' : 'No buy on record'}>—</span>
-                )}</td>
+                <td className="n m">{formatDate(row.boughtAt) || <span title="No buy on record">—</span>}</td>
+                {hasSales && <td className="n m">{formatDate(row.soldAt) ||
+                  <span title={row.status === 'open' ? 'Not sold' : 'No sale date on record'}>—</span>}</td>}
                 <td>
                   <div className="item-with-disclosure">
                     <button className="row-disclosure" aria-label={`Details for ${row.item.marketHashName}`} aria-expanded={expanded}
@@ -209,6 +288,7 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
                   </div>
                 </td>
                 <td className="n m"><FloatCell item={row.item} detailed={detailed} /></td>
+                {showMarketPrices && <td className="n m">{formatDays(row.held)}</td>}
                 <td className="n">{formatMoney(row.buyPrice)}</td>
                 {showMarketPrices && (
                   <>
@@ -219,16 +299,16 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
                     </td>
                   </>
                 )}
-                {sold && (
+                {hasSales && (
                   <>
                     <td className="n">{formatMoney(row.sellPrice)}</td>
                     <td className="n m">{formatMoney(row.fee)}</td>
                   </>
                 )}
-                <td className={`n pl ${signClass(row.net)}`}><NetCell row={row} onPickBuy={onPickBuy} /></td>
-                {sold && (
-                  <td className={`n pl ${signClass(row.percent)}`}>
-                    {row.percent === undefined ? '' : formatPercent(row.percent)}
+                {showNet && <td className={`n pl ${signClass(row.net)}`}><NetCell row={row} onPickBuy={onPickBuy} /></td>}
+                {hasSales && (
+                  <td className="n">
+                    {row.percent !== undefined && <ProfitPercent percent={row.percent} detailed={detailed} />}
                   </td>
                 )}
               </tr>
@@ -243,7 +323,7 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
       </tbody>
       <tfoot>
         <tr>
-          <td colSpan={4}>{plural(totals.rows, 'row')}</td>
+          <td colSpan={leadingColumns}>{summaryLabel}{summaryScope && <span className="m">{summaryScope}</span>}</td>
           <td className="n">{formatMoney(totals.buy)}</td>
           {showMarketPrices && (
             <>
@@ -254,14 +334,14 @@ export function SheetTable({ rows, allRows, detail, showMarketPrices, sort, onSo
               </td>
             </>
           )}
-          {sold && (
+          {hasSales && (
             <>
               <td className="n">{formatMoney(totals.sell)}</td>
               <td className="n m">{formatMoney(totals.fee)}</td>
             </>
           )}
-          <td className={`n pl ${signClass(totals.net)}`}>{totals.net === undefined ? '' : formatSignedMoney(totals.net)}</td>
-          {sold && (
+          {showNet && <td className={`n pl ${signClass(totals.net)}`}>{totals.net === undefined ? '' : formatSignedMoney(totals.net)}</td>}
+          {hasSales && (
             <td className={`n pl ${signClass(totals.weightedPercent)}`} title="Weighted profit over the cost of closed flips">
               {totals.weightedPercent === undefined ? '' : formatPercent(totals.weightedPercent)}
             </td>
@@ -326,6 +406,7 @@ function TradeDetails({ row }: { row: SheetRow }) {
     ['Bought', formatDate(row.boughtAt)],
     ['Sold', formatDate(row.soldAt)],
     ['Held', formatDays(row.held)],
+    ['Listing', row.listing && <ListedTag listing={row.listing} />],
     ['Match', <MatchLabel row={row} />],
     ['If sold now', quote && <Estimate quote={quote} signed={quote.net}>{formatSignedMoney(quote.net)} ({formatPercent(quote.percent)})</Estimate>],
   ];
@@ -382,6 +463,22 @@ function MatchLabel({ row }: { row: SheetRow }) {
   }
   if (row.status === 'open') return <span className="match">Awaiting sale</span>;
   return <span className="match">{row.ambiguous ? 'Pick buy' : 'No buy'}</span>;
+}
+
+function ProfitPercent({ percent, detailed }: { percent: number; detailed: boolean }) {
+  const magnitude = roundTo(Math.abs(percent), 1);
+  const tone = magnitude === 0 ? '' : percent < 0 ? 'neg' : 'pos';
+  const extent = Math.min(magnitude / PROFIT_BAR_LIMIT, 1) * 50;
+  return (
+    <span className={`profit-result ${tone}`}>
+      <span>{magnitude === 0 ? '0.0%' : formatPercent(Math.sign(percent) * magnitude)}</span>
+      {detailed && (
+        <span className="profit-track" aria-hidden="true">
+          {tone && <span className="profit-bar" style={{ width: `${extent}%` }} />}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function ItemCell({ row, detailed, isNew, pricing }: { row: SheetRow; detailed: boolean; isNew: boolean; pricing?: FlipPricing }) {

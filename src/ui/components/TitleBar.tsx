@@ -3,6 +3,8 @@ import { formatTimeAgo } from '../format';
 import type { PricingProgress } from '../../app/sync';
 import type { SyncState } from '../useJournal';
 import type { Theme } from '../useTheme';
+import { Icon } from './Icon';
+import { Signal } from './Signal';
 
 const CLOCK_TICK_MS = 30 * 1000;
 
@@ -34,25 +36,27 @@ export function TitleBar({ title, children, onSync, syncState, theme, onToggleTh
     <div className="titlebar">
       <h1>{title}</h1>
       {children}
-      <SyncLabel syncState={syncState} {...status} />
-      <button className="btn" onClick={onSync} disabled={syncState.kind === 'syncing'}>Sync now</button>
-      <button className="btn sq ghost" onClick={onToggleTheme} aria-label={themeLabel} title={themeLabel}>
-        {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-      </button>
+      <div className="title-actions">
+        <SyncLabel syncState={syncState} {...status} />
+        <button className="btn pri" onClick={onSync} disabled={syncState.kind === 'syncing'}>Sync now</button>
+        <button className="btn sq ghost" onClick={onToggleTheme} aria-label={themeLabel} title={themeLabel}>
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+        </button>
+      </div>
     </div>
   );
 }
 
 function SyncLabel({ lastSyncAt, lastSyncError, syncState }: Pick<SyncProps, 'lastSyncAt' | 'lastSyncError' | 'syncState'>) {
   const now = useNow(CLOCK_TICK_MS);
-  if (syncState.kind === 'syncing') return <span className="sync">Syncing with CSFloat…</span>;
+  if (syncState.kind === 'syncing') return <span className="sync has-signal" role="status"><Signal /> Syncing with CSFloat</span>;
 
   const error = syncState.kind === 'failed' ? syncState.error : lastSyncError;
-  if (error) return <span className="sync err" title={error}>Sync failed: {error}</span>;
+  if (error) return <span className="sync err" title={error} role="status">Sync failed: {error}</span>;
 
   if (!lastSyncAt) return <span className="sync">Not synced with CSFloat yet</span>;
   return (
-    <span className="sync" title="Flipbook syncs on its own whenever a CSFloat tab is open">
+    <span className="sync" title="flipbook syncs on its own whenever a CSFloat tab is open">
       Synced {formatTimeAgo(lastSyncAt, now)}
     </span>
   );
@@ -65,32 +69,4 @@ function useNow(intervalMs: number): number {
     return () => clearInterval(timer);
   }, [intervalMs]);
   return now;
-}
-
-const iconProps = {
-  viewBox: '0 0 24 24',
-  width: 15,
-  height: 15,
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 2,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-  'aria-hidden': true,
-} as const;
-
-function SunIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg {...iconProps}>
-      <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-    </svg>
-  );
 }

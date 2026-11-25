@@ -27,7 +27,7 @@ export function ReviewScreen({ review, sentToOther, feeRate, sync, onPaired, onO
     <>
       <header className="top">
         <TitleBar title="Needs review" {...sync} />
-        <p className="note">Sales Flipbook couldn't pair by itself.</p>
+        <p className="note">Sales flipbook couldn't pair by itself.</p>
       </header>
       <div className="page">
         {review.length > 0 ? (
@@ -49,7 +49,7 @@ export function ReviewScreen({ review, sentToOther, feeRate, sync, onPaired, onO
         {sentToOther > 0 && (
           <div className="card">
             <h2>Sent to Other</h2>
-            <p className="note">{plural(sentToOther, 'sale')} had no buy on record, so Flipbook put them in Other.</p>
+            <p className="note">{plural(sentToOther, 'sale')} had no buy on record, so flipbook put them in Other.</p>
             <button className="btn" onClick={onOpenOther}>Open Other</button>
           </div>
         )}

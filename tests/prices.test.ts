@@ -80,6 +80,8 @@ describe('sorting and totals at today\'s price', () => {
     const names = sortRows(rows, { key: 'nowNet', descending: true }).map((row) => row.item.marketHashName);
     expect(names).toEqual(['Sticker | B', 'Sticker | A', 'Sticker | C']);
     const totals = totalRows(rows);
+    expect(totals.buy).toBe(3);
+    expect(totals.pricedBuy).toBe(2);
     expect(totals.nowPrice).toBeCloseTo(3.5);
     expect(totals.nowNet).toBeCloseTo(1.5);
     expect(totals.nowPercent).toBeCloseTo(75);

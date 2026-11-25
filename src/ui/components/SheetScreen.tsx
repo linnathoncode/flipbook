@@ -1,10 +1,11 @@
-import { useState, type DragEvent, type FormEvent, type MouseEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from 'react';
 import { deleteFolder, renameFolder } from '../../app/actions';
 import { HOLDS_ID, isDefaultFolder, OTHER_ID, type Folder } from '../../domain/folders';
 import { ITEM_KINDS, itemKind, KIND_PLURAL } from '../../domain/itemKinds';
-import { clearChips, EMPTY_FILTER, isNarrowed, isUnfiltered, pickResult, toggleExcludedKind, toggleExcludedResult, toggleKind, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
-import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
+import { clearChips, EMPTY_FILTER, isNarrowed, isUnfiltered, pickResult, toggleExcludedKind, toggleExcludedResult, toggleKind, totalRows, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
+import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural, roundTo } from '../format';
 import type { Selection } from '../useSelection';
+import { Icon } from './Icon';
 import { PageTurner } from './PageTurner';
 import { SheetTable, type FlipPricing, type RowDetail } from './SheetTable';
 import { Kpi } from './shared';
@@ -19,8 +20,8 @@ const RESULTS: { value: ResultFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'open', label: 'Open' },
   { value: 'listed', label: 'Listed' },
-  { value: 'win', label: 'Wins' },
-  { value: 'loss', label: 'Losses' },
+  { value: 'win', label: 'Flips' },
+  { value: 'loss', label: 'Flops' },
 ];
 
 export interface SheetView {
@@ -45,6 +46,7 @@ interface Props {
   rows: SheetRow[];
   /** Filtered and sorted. */
   shown: SheetRow[];
+  hasSales: boolean;
   view: SheetView;
   selection: Selection;
   newSince?: string;
@@ -59,31 +61,37 @@ interface Props {
   onChange: () => void;
 }
 
-export function SheetScreen({ folder, rows, shown, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag, onPickBuy, onFolderDeleted, onChange }: Props) {
+export function SheetScreen({ folder, rows, shown, hasSales, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag, onPickBuy, onFolderDeleted, onChange }: Props) {
+  const sheet = useRef<HTMLDivElement>(null);
+  useSheetDivider(sheet);
   const pageCount = view.pageSize === 'all' ? 1 : Math.max(1, Math.ceil(shown.length / view.pageSize));
   const page = Math.min(view.page, pageCount - 1);
   const pageRows = view.pageSize === 'all' ? shown : shown.slice(page * view.pageSize, (page + 1) * view.pageSize);
   const filtered = !isUnfiltered(view.filter);
+  const holds = folder?.id === HOLDS_ID;
 
   return (
-    <div className="sheet-workspace">
+    <div className="sheet-workspace" ref={sheet}>
       <header className="top">
         <FolderTitle folder={folder} rowCount={rows.length} sync={sync} onChange={onChange} onDeleted={onFolderDeleted} />
         <SheetNote folder={folder} />
-        <div className="kpis"><SheetKpis folder={folder} rows={rows} sync={sync} /></div>
+        <div className={folder?.id === HOLDS_ID ? 'kpis holds-kpis' : 'kpis'}>
+          <SheetKpis folder={folder} rows={rows} sync={sync} />
+        </div>
       </header>
       {selection.count > 0 ? (
         <SelectionBar count={selection.count} onMoveMenu={onMoveMenu} moveMenuOpen={moveMenuOpen} onClear={selection.clear} />
       ) : (
-        <Toolbar view={view} shown={shown.length} total={rows.length} />
+        <Toolbar view={view} shown={shown.length} total={rows.length} holds={holds} hasSales={hasSales} />
       )}
       {view.filtersOpen && <Filters rows={rows} filter={view.filter} onChange={view.setFilter} />}
       <div className="tablewrap">
         <SheetTable
           rows={pageRows}
           allRows={shown}
+          hasSales={hasSales}
           detail={view.detail}
-          showMarketPrices={folder?.id === HOLDS_ID}
+          showMarketPrices={holds}
           sort={view.sort}
           onSort={view.setSort}
           selection={selection}
@@ -106,8 +114,37 @@ export function SheetScreen({ folder, rows, shown, view, selection, newSince, sy
   );
 }
 
+function useSheetDivider(sheet: RefObject<HTMLDivElement>) {
+  useLayoutEffect(() => {
+    const workspace = sheet.current;
+    const divider = workspace?.closest('.fb')?.querySelector<HTMLElement>('.nav-gap');
+    const table = workspace?.querySelector<HTMLElement>('.tablewrap');
+    const header = table?.querySelector('thead');
+    const folders = divider?.previousElementSibling;
+    if (!divider || !table || !header || !folders) return;
+
+    let extra = 0;
+    const align = () => {
+      if (!divider.offsetParent) return;
+      const headerRule = table.offsetTop + header.offsetHeight - 1;
+      const next = Math.max(0, headerRule - (divider.offsetTop - extra));
+      if (extra === next) return;
+      extra = next;
+      divider.style.setProperty('--sheet-divider-offset', `${extra}px`);
+    };
+
+    align();
+    const observer = new ResizeObserver(align);
+    for (const element of [table, header, folders]) observer.observe(element);
+    return () => {
+      observer.disconnect();
+      divider.style.removeProperty('--sheet-divider-offset');
+    };
+  }, [sheet]);
+}
+
 function emptyText(folder?: Folder): string {
-  if (!folder) return 'No trades yet. Open CSFloat and Flipbook syncs your trades on its own.';
+  if (!folder) return 'No trades yet. Open CSFloat and flipbook syncs your trades on its own.';
   if (folder.id === HOLDS_ID) return 'Nothing here yet. Move items you bought to keep here and they stop counting as flips.';
   if (folder.id === OTHER_ID) return 'Nothing here. Sales with no buy on record land here on their own.';
   return 'This folder is empty. Drag rows onto it in the sidebar, or select rows and use Move to.';
@@ -125,7 +162,6 @@ function SheetNote({ folder }: { folder?: Folder }) {
 }
 
 function SheetKpis({ folder, rows, sync }: { folder?: Folder; rows: SheetRow[]; sync: SyncProps }) {
-  const closed = rows.filter((row) => row.status === 'closed');
   const open = rows.filter((row) => row.status === 'open');
   const sales = rows.filter((row) => row.status === 'sale');
   const sum = (list: SheetRow[], pick: (row: SheetRow) => number | undefined) => list.reduce((total, row) => total + (pick(row) ?? 0), 0);
@@ -142,22 +178,20 @@ function SheetKpis({ folder, rows, sync }: { folder?: Folder; rows: SheetRow[]; 
     return (
       <>
         <Kpi label="Holding" value={open.length} />
-        <Kpi label="Cost" value={formatMoney(sum(open, (row) => row.buyPrice))} />
+        <Kpi label="Total buy cost" value={formatMoney(sum(open, (row) => row.buyPrice))} />
         <HoldValue open={open} sync={sync} />
-        <Kpi label="Longest held" value={plural(Math.max(0, ...open.map((row) => row.held ?? 0)), 'day')} />
       </>
     );
   }
 
-  const net = sum(closed, (row) => row.net);
-  const wins = closed.filter((row) => (row.net ?? 0) >= 0).length;
-  const averagePercent = closed.length ? sum(closed, (row) => row.percent) / closed.length : 0;
+  const { closed, net, weightedPercent } = totalRows(rows);
+  const wins = rows.filter((row) => row.net !== undefined && roundTo(row.net, 2) >= 0).length;
   return (
     <>
-      <Kpi label="Net profit" value={formatSignedMoney(net)} sign={closed.length ? net : undefined} />
-      <Kpi label="Closed" value={closed.length} />
-      <Kpi label="Win rate" value={closed.length ? `${Math.round((wins / closed.length) * 100)}%` : '0%'} />
-      <Kpi label="Avg profit" value={formatPercent(averagePercent)} sign={closed.length ? averagePercent : undefined} />
+      <Kpi label="Net profit" value={net === undefined ? '—' : formatSignedMoney(net)} sign={net} />
+      <Kpi label="Closed" value={closed} />
+      <Kpi label="Win rate" value={closed ? `${Math.round((wins / closed) * 100)}%` : '—'} />
+      <Kpi label="Weighted return" value={weightedPercent === undefined ? '—' : formatPercent(weightedPercent)} sign={weightedPercent} sub="On closed buy cost" />
       <Kpi label="Open" value={open.length} sub={`${formatMoney(sum(open, (row) => row.buyPrice))} in`} />
     </>
   );
@@ -182,23 +216,25 @@ function HoldValue({ open, sync }: { open: SheetRow[]; sync: SyncProps }) {
   ) : (
     `${priced.length} of ${open.length} priced, ${formatTimeAgo(oldest!)}`
   );
-  const net = priced.reduce((total, row) => total + row.quote!.net, 0);
+  const { nowPrice, nowNet, pricedBuy } = totalRows(open);
 
   return (
     <>
-      <div className="hold-value">
-        <Kpi label="Worth now" value={priced.length ? formatMoney(priced.reduce((total, row) => total + row.quote!.price, 0)) : ''} sub={status} />
-        <Kpi label="If sold now" value={priced.length ? formatSignedMoney(net) : ''} sign={priced.length ? net : undefined} sub={priced.length ? 'after the fee' : undefined} />
+      <Kpi label="Worth now" value={formatMoney(nowPrice) || '\u2014'}
+        sub={pricedBuy !== undefined && priced.length < open.length ? `${formatMoney(pricedBuy)} buy cost for priced items` : undefined} />
+      <Kpi label="Profit if sold" value={nowNet === undefined ? '\u2014' : formatSignedMoney(nowNet)} sign={nowNet}
+        sub={nowNet === undefined ? undefined : 'After fees'} />
+      <Kpi label="Longest held" value={open.length ? plural(open.reduce((days, row) => Math.max(days, row.held ?? 0), 0), 'day') : '\u2014'} />
+      <div className="hold-pricing">
+        <span className="hint" role="status">{status}</span>
+        <button className="btn" onClick={sync.onRefreshPrices} disabled={refreshing || paused || pricing !== undefined}>
+          {pricing ? 'Pricing\u2026' : refreshing ? 'Syncing\u2026' : 'Refresh prices'}
+        </button>
         {pricing && (
           <div className="pricing-line" role="progressbar" aria-label="Pricing held items" aria-valuemin={0} aria-valuemax={pricing.total} aria-valuenow={pricing.done}>
             <i style={{ width: `${(pricing.done / pricing.total) * 100}%` }} />
           </div>
         )}
-      </div>
-      <div className="kpi-action">
-        <button className="btn ghost" onClick={sync.onRefreshPrices} disabled={refreshing || paused || pricing !== undefined}>
-          {pricing ? 'Pricing…' : refreshing ? 'Syncing…' : 'Refresh prices'}
-        </button>
       </div>
     </>
   );
@@ -280,17 +316,24 @@ const SHEET_SORTS: Record<Sort['key'], string> = {
 };
 const SORT_OPTIONS = Object.entries(SHEET_SORTS) as [Sort['key'], string][];
 
-function SheetSort({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void }) {
+export function sheetSortAvailable(key: Sort['key'], holds: boolean, hasSales: boolean): boolean {
+  if (key === 'nowPrice' || key === 'nowNet' || key === 'nowPercent') return holds;
+  if (key === 'sold' || key === 'sellPrice' || key === 'percent' || (holds && key === 'net')) return hasSales;
+  return true;
+}
+
+function SheetSort({ sort, onSort, holds, hasSales }: { sort: Sort; onSort: (sort: Sort) => void; holds: boolean; hasSales: boolean }) {
   const reverseLabel = sort.descending ? 'Sort ascending' : 'Sort descending';
+  const options = SORT_OPTIONS.filter(([key]) => sheetSortAvailable(key, holds, hasSales));
   return (
     <div className="sheet-sort">
       <label>
         <span>Sort by</span>
         <select className="btn" value={sort.key} onChange={(event) => {
-          const option = SORT_OPTIONS.find(([key]) => key === event.target.value);
+          const option = options.find(([key]) => key === event.target.value);
           if (option) onSort({ key: option[0], descending: option[0] !== 'name' });
         }}>
-          {SORT_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          {options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
       </label>
       <button className="btn sq" aria-label={reverseLabel} title={reverseLabel} onClick={() => onSort({ ...sort, descending: !sort.descending })}>
@@ -300,29 +343,32 @@ function SheetSort({ sort, onSort }: { sort: Sort; onSort: (sort: Sort) => void 
   );
 }
 
-function Toolbar({ view, shown, total }: { view: SheetView; shown: number; total: number }) {
+function Toolbar({ view, shown, total, holds, hasSales }: { view: SheetView; shown: number; total: number; holds: boolean; hasSales: boolean }) {
   const { kinds, result, excludedKinds, excludedResults } = view.filter;
   const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
   return (
     <div className="toolbar">
-      <input
-        type="search"
-        className="search"
-        value={view.filter.query}
-        onChange={(event) => view.setFilter({ ...view.filter, query: event.target.value })}
-        placeholder="Search items"
-        aria-label="Search items"
-        autoComplete="off"
-      />
+      <label className="search-control">
+        <Icon name="search" />
+        <input
+          type="search"
+          className="search"
+          value={view.filter.query}
+          onChange={(event) => view.setFilter({ ...view.filter, query: event.target.value })}
+          placeholder="Search items"
+          aria-label="Search items"
+          autoComplete="off"
+        />
+      </label>
       <button className="btn" aria-expanded={view.filtersOpen} aria-controls="filters" onClick={view.toggleFilters}>
-        Filters{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
+        <Icon name="filter" /> Filters{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
       </button>
-      <SheetSort sort={view.sort} onSort={view.setSort} />
+      <SheetSort sort={view.sort} onSort={view.setSort} holds={holds} hasSales={hasSales} />
       <span className="count" aria-live="polite">{shown === total ? plural(total, 'row') : `${shown} of ${plural(total, 'row')}`}</span>
       <div className="tb-end">
         <div className="seg" role="group" aria-label="Row detail">
-          <button aria-pressed={view.detail === 'compact'} onClick={() => view.setDetail('compact')}>Compact</button>
           <button aria-pressed={view.detail === 'detailed'} onClick={() => view.setDetail('detailed')}>Detailed</button>
+          <button aria-pressed={view.detail === 'compact'} onClick={() => view.setDetail('compact')}>Compact</button>
         </div>
       </div>
     </div>

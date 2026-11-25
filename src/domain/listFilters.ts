@@ -276,6 +276,7 @@ export interface RowTotals {
   rows: number;
   closed: number;
   buy?: number;
+  pricedBuy?: number;
   sell?: number;
   fee?: number;
   net?: number;
@@ -303,6 +304,7 @@ export function totalRows(rows: SheetRow[]): RowTotals {
     rows: rows.length,
     closed: closed.length,
     buy: total((row) => row.buyPrice),
+    pricedBuy: priced.length ? pricedCost : undefined,
     sell: total((row) => row.sellPrice),
     fee: total((row) => row.fee),
     net,
