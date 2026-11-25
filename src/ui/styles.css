@@ -121,6 +121,8 @@ input {
 .fb {
   position: relative;
   height: 100%;
+  max-width: 1680px;
+  margin-inline: auto;
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr);
   grid-template-areas: 'nav main';
