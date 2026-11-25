@@ -975,11 +975,11 @@ input {
   cursor: pointer;
 }
 
-.row:hover td {
+.row:hover {
   background-color: var(--hover);
 }
 
-.row.sel td {
+.row.sel {
   background-color: var(--sel);
 }
 
@@ -1064,11 +1064,11 @@ input {
   100% { opacity: 0; transform: translateX(3px); }
 }
 
-.row.expanded:not(.sel) td {
+.row.expanded:not(.sel) {
   background-color: var(--hover);
 }
 
-.sheet-workspace[data-inspector] .row.expanded:not(.sel) td {
+.sheet-workspace[data-inspector] .row.expanded:not(.sel) {
   background-color: var(--sel);
 }
 
@@ -2584,7 +2584,7 @@ a.market-link:active {
 .row-disclosure,
 .market-link,
 button.link,
-.row td,
+.row,
 .menu button,
 .toast button {
   transition: background-color 120ms var(--control-easing), color 120ms var(--control-easing),
