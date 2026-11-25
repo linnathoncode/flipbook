@@ -2765,14 +2765,17 @@ button:is(.btn, .chip):active:not(:disabled),
     box-shadow: inset 0 -1px var(--surface-rim);
   }
 
-  .sheet-inspector,
-  .sheet-picker-list {
+  .sheet-inspector {
     box-shadow: inset 1px 0 var(--surface-rim), inset 0 1px var(--surface-rim);
   }
 
   @media (max-width: 960px) {
     .nav {
       box-shadow: inset 0 -1px var(--surface-rim);
+    }
+
+    .sheet-picker-list {
+      box-shadow: inset 1px 0 var(--surface-rim), inset 0 1px var(--surface-rim);
     }
   }
 }
