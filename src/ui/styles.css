@@ -600,13 +600,13 @@ input {
 }
 
 .seg button[aria-pressed='true'],
-.chip[aria-pressed='true'] {
+.chip.included {
   background: var(--cta);
   color: var(--on-accent);
 }
 
 .seg button[aria-pressed='true']:hover,
-.chip[aria-pressed='true']:not(.excluded):hover {
+.chip.included:hover {
   background: var(--cta-hover);
 }
 
@@ -673,6 +673,13 @@ input {
   background: var(--side);
 }
 
+.filter-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .flabel {
   margin-right: 4px;
   font-size: 12px;
@@ -696,7 +703,7 @@ input {
   background: var(--hover);
 }
 
-.chip[aria-pressed='true'] {
+.chip.included {
   border-color: var(--cta);
 }
 
@@ -771,8 +778,8 @@ input {
   margin-inline: 0;
 }
 
-.sheet-inspector .filter-mode {
-  margin-inline-end: auto;
+.sheet-inspector .filter-actions {
+  flex-basis: 100%;
 }
 
 .analytics-scope {
@@ -2558,7 +2565,7 @@ button.link,
   17% { opacity: 1; }
 }
 
-:is(.btn.pri, .btn[aria-pressed='true'], .btn[aria-expanded='true'], .chip[aria-pressed='true'],
+:is(.btn.pri, .btn[aria-pressed='true'], .btn[aria-expanded='true'], .chip.included,
   .seg button[aria-pressed='true'], .nav-item[aria-current='page']) {
   --button-press-inset: var(--press-inset-cta);
 }

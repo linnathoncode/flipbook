@@ -134,7 +134,11 @@ export function SheetScreen({
     } else inspectorHeading.current?.focus();
   };
   const filterControls = <Filters rows={scopedRows} closedOnly={Boolean(drilldown)} filter={view.filter} onChange={view.setFilter}
-    excluding={excluding} setExcluding={setExcluding} />;
+    excluding={excluding} setExcluding={setExcluding}
+    onEscape={showInspector ? undefined : () => {
+      (filtersTrigger.current ?? ledger.current)?.focus();
+      view.toggleFilters();
+    }} />;
 
   return (
     <div className="sheet-workspace" ref={sheet} data-inspector={showInspector || undefined}>
@@ -252,7 +256,7 @@ function emptyText(folder?: Folder): string {
   if (!folder) return 'No trades yet. Open CSFloat and flipbook syncs your trades on its own.';
   if (folder.id === HOLDS_ID) return 'Nothing here yet. Move items you bought to keep here and they stop counting as flips.';
   if (folder.id === OTHER_ID) return 'Nothing here. Sales with no buy on record land here on their own.';
-  return 'This folder is empty. Drag rows onto it in the sidebar, or select rows and use Move to.';
+  return 'This folder is empty. Select rows in another sheet and choose Move to.';
 }
 
 function SheetNote({ folder }: { folder?: Folder }) {
@@ -505,9 +509,9 @@ function SelectionBar({ count, onMoveMenu, moveMenuOpen, onClear }: SelectionBar
 }
 
 /** Only the kinds on this sheet get a chip. */
-function Filters({ rows, closedOnly, filter, onChange, excluding, setExcluding }: {
+function Filters({ rows, closedOnly, filter, onChange, excluding, setExcluding, onEscape }: {
   rows: SheetRow[]; closedOnly: boolean; filter: ListFilter; onChange: (filter: ListFilter) => void;
-  excluding: boolean; setExcluding: (value: boolean) => void;
+  excluding: boolean; setExcluding: (value: boolean) => void; onEscape?: () => void;
 }) {
   const mode = useRef<HTMLDivElement>(null);
   const present = new Set(rows.map((row) => itemKind(row.item)));
@@ -516,17 +520,27 @@ function Filters({ rows, closedOnly, filter, onChange, excluding, setExcluding }
     (!excluding || value !== 'all') && (!closedOnly || (value !== 'open' && value !== 'listed')));
 
   return (
-    <div className="filters" id="filters">
-      <div className="seg filter-mode" role="group" aria-label="Filter action" ref={mode}>
-        <button type="button" aria-pressed={!excluding} onClick={() => setExcluding(false)}>Include</button>
-        <button type="button" aria-pressed={excluding} onClick={() => setExcluding(true)}>Exclude</button>
+    <div className="filters" id="filters" onKeyDown={onEscape && ((event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      onEscape();
+    })}>
+      <div className="filter-actions">
+        <div className="seg" role="group" aria-label="Filter action" ref={mode}>
+          <button type="button" aria-pressed={!excluding} onClick={() => setExcluding(false)}>Include</button>
+          <button type="button" aria-pressed={excluding} onClick={() => setExcluding(true)}>Exclude</button>
+        </div>
+        {isNarrowed(filter) && <button className="btn ghost" onClick={() => {
+          mode.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
+          onChange(clearChips(filter));
+        }}>Clear filters</button>}
       </div>
       <span className="flabel">Type</span>
       {kinds.map((kind) => {
         const included = filter.kinds.includes(kind);
         const excluded = filter.excludedKinds.includes(kind);
         const toggleExcluded = () => onChange(toggleExcludedKind(filter, kind));
-        return <FilterChip key={kind} label={KIND_PLURAL[kind]} included={included} excluded={excluded}
+        return <FilterChip key={kind} label={KIND_PLURAL[kind]} included={included} excluded={excluded} excluding={excluding}
           onActivate={excluded || (excluding && !included) ? toggleExcluded : () => onChange(toggleKind(filter, kind))}
           onExclude={toggleExcluded} />;
       })}
@@ -535,24 +549,26 @@ function Filters({ rows, closedOnly, filter, onChange, excluding, setExcluding }
         const included = filter.result === value;
         const excluded = filter.excludedResults.includes(value);
         const toggleExcluded = () => onChange(toggleExcludedResult(filter, value));
-        return <FilterChip key={value} label={label} included={included} excluded={excluded}
+        return <FilterChip key={value} label={label} included={included} excluded={excluded} excluding={excluding}
+          allResults={value === 'all'}
           onActivate={excluded || (excluding && !included) ? toggleExcluded : () => onChange(pickResult(filter, included ? 'all' : value))}
           onExclude={value === 'all' ? undefined : toggleExcluded} />;
       })}
-      {isNarrowed(filter) && <button className="btn ghost" onClick={() => {
-        mode.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
-        onChange(clearChips(filter));
-      }}>Clear filters</button>}
     </div>
   );
 }
 
-function FilterChip({ label, included, excluded, onActivate, onExclude }: {
-  label: string; included: boolean; excluded: boolean; onActivate: () => void; onExclude?: () => void;
+function FilterChip({ label, included, excluded, excluding, allResults, onActivate, onExclude }: {
+  label: string; included: boolean; excluded: boolean; excluding: boolean; allResults?: boolean;
+  onActivate: () => void; onExclude?: () => void;
 }) {
+  const action = allResults ? 'Show all results'
+    : excluded ? `Clear exclusion for ${label}`
+    : included ? `Clear inclusion for ${label}`
+    : `${excluding ? 'Exclude' : 'Include'} ${label}`;
   return (
-    <button type="button" className={excluded ? 'chip excluded' : 'chip'} aria-pressed={excluded ? undefined : included}
-      aria-label={excluded ? `Clear exclusion for ${label}` : undefined} onClick={onActivate}
+    <button type="button" className={`chip${excluded ? ' excluded' : included ? ' included' : ''}`}
+      aria-label={action} aria-description={allResults && included ? 'Selected' : undefined} onClick={onActivate}
       onContextMenu={onExclude && ((event) => {
         event.preventDefault();
         onExclude();
