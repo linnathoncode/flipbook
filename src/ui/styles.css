@@ -852,6 +852,7 @@ input {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  background-color: var(--bg);
 }
 
 .pager {
@@ -2743,6 +2744,15 @@ button:is(.btn, .chip):active:not(:disabled),
 @keyframes grow {
   from {
     transform: scaleX(0);
+  }
+}
+
+@media (forced-colors: none) {
+  .fb,
+  .nav,
+  .sheet-inspector,
+  .sheet-picker-list {
+    background-image: url('./surface-grain.png');
   }
 }
 
