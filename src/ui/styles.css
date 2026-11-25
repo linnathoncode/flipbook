@@ -400,7 +400,6 @@ input {
 }
 
 .kpi .s {
-  font-family: var(--font-num);
   font-size: 11.5px;
   color: var(--muted);
 }
@@ -724,9 +723,13 @@ input {
 }
 
 .sheet th.n {
-  width: 8%;
+  width: 1%;
   font-family: inherit;
   font-size: 12px;
+}
+
+.fb[data-rows='compact'] .sheet tbody {
+  --pad-y: 5px;
 }
 
 .sheet .m {
@@ -778,13 +781,12 @@ input {
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
-  width: 23px;
+  width: 28px;
   pointer-events: none;
   background: linear-gradient(
     to right,
-    var(--outcome-light) 0 4px,
-    color-mix(in srgb, var(--outcome-light) 18%, transparent) 4px,
-    transparent 23px
+    color-mix(in srgb, var(--outcome-light) 24%, transparent),
+    transparent
   );
 }
 
@@ -866,6 +868,7 @@ input {
   display: flex;
   align-items: center;
   gap: 5px;
+  min-width: 240px;
 }
 
 .row-disclosure {
@@ -954,11 +957,10 @@ thead:hover .chk input {
 
 .market-actions {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 3px 8px;
   font-size: 12px;
-  border-inline-start: 1px solid var(--rule);
-  padding-inline-start: 8px;
 }
 
 .market-link {
@@ -997,8 +999,18 @@ thead:hover .chk input {
 }
 
 .market-actions .market-price {
-  height: 23px;
-  padding-inline: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.market-actions .market-price:disabled {
+  opacity: 0.6;
+  cursor: default;
+  text-decoration: none;
 }
 
 .item-title {
@@ -1024,7 +1036,8 @@ thead:hover .chk input {
 }
 
 .profit-track,
-.wbar {
+.wbar,
+.ttrack {
   height: 9px;
   position: relative;
   border-radius: 3px;
@@ -1032,11 +1045,16 @@ thead:hover .chk input {
 
 .profit-track {
   width: 44px;
+}
+
+.profit-track,
+.ttrack {
   background: light-dark(color-mix(in srgb, var(--side) 94%, black), var(--hover));
 }
 
 .profit-track,
-.wbar::after {
+.wbar::after,
+.ttrack {
   box-shadow:
     inset 1px 1px 0 light-dark(color-mix(in srgb, var(--side) 66%, black), #090b0e),
     inset -1px -1px 0 light-dark(color-mix(in srgb, var(--side) 76%, white), rgb(255 255 255 / 34%)),
@@ -1611,6 +1629,8 @@ thead:hover .chk input {
 }
 
 .analytics-page {
+  --chart-pos: light-dark(var(--pos), color-mix(in srgb, var(--pos) 68%, var(--bg)));
+  --chart-neg: light-dark(var(--neg), color-mix(in srgb, var(--neg) 82%, var(--bg)));
   gap: 28px;
 }
 
@@ -1667,8 +1687,8 @@ thead:hover .chk input {
   background: var(--muted);
 }
 
-.outcome-split .pos { background: var(--pos); }
-.outcome-split .neg { background: var(--neg); }
+.outcome-split .pos { background: var(--chart-pos); }
+.outcome-split .neg { background: var(--chart-neg); }
 
 .analytics-inventory {
   display: grid;
@@ -1744,11 +1764,11 @@ thead:hover .chk input {
 }
 
 .ch-pos {
-  fill: var(--pos);
+  fill: var(--chart-pos);
 }
 
 .ch-neg {
-  fill: var(--neg);
+  fill: var(--chart-neg);
 }
 
 .trows {
@@ -1784,13 +1804,6 @@ thead:hover .chk input {
   color: var(--muted);
 }
 
-.ttrack {
-  position: relative;
-  height: 8px;
-  background: var(--hover);
-  border-radius: 3px;
-}
-
 .ttrack::before {
   content: '';
   position: absolute;
@@ -1801,18 +1814,18 @@ thead:hover .chk input {
 
 .ttrack i {
   position: absolute;
-  inset-block: 0;
+  inset-block: 2px;
   border-radius: 2px;
 }
 
 .ttrack i.pos {
   inset-inline-start: 50%;
-  background: var(--pos);
+  background: var(--chart-pos);
 }
 
 .ttrack i.neg {
   inset-inline-end: 50%;
-  background: var(--neg);
+  background: var(--chart-neg);
 }
 
 .trow .n,

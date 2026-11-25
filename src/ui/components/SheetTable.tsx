@@ -365,7 +365,7 @@ function MarketActions({ row, pricing }: { row: SheetRow; pricing?: FlipPricing 
         Listings <span aria-hidden="true">↗</span>
       </a>
       {pricing && (
-        <button className="btn market-price" disabled={pricing.active !== undefined} onClick={() => pricing.onPrice(row)} title={priceHint}
+        <button className="link market-link market-price" disabled={pricing.active !== undefined} onClick={() => pricing.onPrice(row)} title={priceHint}
           aria-label={busy ? `Pricing ${name}` : quote ? `Refresh price for ${name}` : `Price item: ${name}`}>
           <span aria-live="polite">{busy ? 'Pricing…' : quote ? 'Refresh prices' : 'Price item'}</span>
           {quote && !busy && <span aria-hidden="true">↻</span>}
