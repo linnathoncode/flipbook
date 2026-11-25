@@ -451,10 +451,17 @@ input {
   border-radius: var(--radius);
 }
 
-.search-control {
+.field-sprinkle {
   position: relative;
   display: inline-flex;
   max-width: 100%;
+}
+
+.nf .field-sprinkle {
+  width: 100%;
+}
+
+.search-control {
   align-items: center;
 }
 
@@ -469,7 +476,8 @@ input {
   padding-inline-start: 33px;
 }
 
-.search:focus {
+.search:focus,
+.sheet-sort select:focus-visible {
   border-color: var(--accent);
   outline: 1px solid var(--accent);
   outline-offset: 0;
@@ -792,7 +800,7 @@ input {
     width: clamp(80px, 5%, 136px);
   }
 
-  .fb[data-wide-layout='adaptive'] .sheet-workspace :is(.title-actions, .tb-end) {
+  .fb[data-wide-layout='adaptive'] .sheet-workspace .title-actions {
     margin-inline-start: 16px;
   }
 }
@@ -925,13 +933,48 @@ input {
   gap: 5px;
 }
 
-.sheet-sort label > span {
+.sheet-sort label > span:first-child {
   color: var(--muted);
   white-space: nowrap;
 }
 
 .sheet-sort select {
   max-width: 168px;
+}
+
+@supports (appearance: base-select) and selector(::picker(select)) {
+  .sheet-sort select,
+  .sheet-sort select::picker(select) {
+    appearance: base-select;
+  }
+
+  .sheet-sort select::picker(select) {
+    margin-block-start: 4px;
+    padding: 4px;
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  .sheet-sort select::picker-icon {
+    color: var(--muted);
+  }
+
+  .sheet-sort option {
+    min-height: 30px;
+    padding: 5px 8px;
+    border-radius: calc(var(--radius) - 3px);
+  }
+
+  .sheet-sort option:checked {
+    background: var(--cta);
+    color: var(--on-accent);
+  }
+
+  .sheet-sort option:not(:checked):is(:hover, :focus-visible) {
+    background: var(--hover);
+  }
 }
 
 .item-with-disclosure {

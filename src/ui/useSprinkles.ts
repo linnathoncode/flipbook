@@ -35,17 +35,14 @@ export function useSprinkles() {
       active = undefined;
     };
 
-    const play = (event: MouseEvent) => {
-      if (motion.matches || !(event.target instanceof Element)) return;
-      const button = event.target.closest<HTMLButtonElement>(CONTROLS);
-      if (!button || button.disabled) return;
-
+    const play = (anchor: HTMLElement) => {
+      if (motion.matches) return;
       clear();
       const burst = document.createElement('span');
       burst.className = 'sprinkles';
       burst.setAttribute('aria-hidden', 'true');
       active = burst;
-      button.append(burst);
+      anchor.append(burst);
       animations = FLECKS.map(({ glyph, left, top, frames }) => {
         const fleck = document.createElement('span');
         fleck.textContent = glyph;
@@ -59,21 +56,38 @@ export function useSprinkles() {
       });
     };
 
+    const playButton = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest<HTMLButtonElement>(CONTROLS);
+      if (button && !button.disabled) play(button);
+    };
+    const playField = (field: HTMLInputElement | HTMLSelectElement) => {
+      const anchor = field.closest<HTMLElement>('.field-sprinkle');
+      if (anchor && !field.disabled && active?.parentElement !== anchor) play(anchor);
+    };
     const press = (event: PointerEvent) => {
-      if (event.isPrimary && event.button === 0) play(event);
+      if (!event.isPrimary || event.button !== 0) return;
+      if (event.target instanceof HTMLSelectElement) playField(event.target);
+      else playButton(event);
     };
     const keyboard = (event: MouseEvent) => {
-      if (event.detail === 0) play(event);
+      if (event.detail === 0) playButton(event);
+    };
+    const focus = (event: FocusEvent) => {
+      const field = event.target;
+      if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) playField(field);
     };
 
     document.addEventListener('pointerdown', press, true);
     document.addEventListener('click', keyboard, true);
+    document.addEventListener('focusin', focus);
     motion.addEventListener('change', clear);
     return () => {
       clear();
       motion.removeEventListener('change', clear);
       document.removeEventListener('pointerdown', press, true);
       document.removeEventListener('click', keyboard, true);
+      document.removeEventListener('focusin', focus);
     };
   }, []);
 }

@@ -128,9 +128,12 @@ function useSheetDivider(sheet: RefObject<HTMLDivElement>) {
     let extra = 0;
     const align = () => {
       if (!divider.offsetParent) return;
-      const headerRule = table.offsetTop + header.offsetHeight - 1;
-      const next = Math.max(0, headerRule - (divider.offsetTop - extra));
-      if (extra === next) return;
+      const transform = getComputedStyle(table).transform;
+      const translation = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
+      const headerBottom = table.getBoundingClientRect().top - translation + header.getBoundingClientRect().height;
+      const dividerBottom = divider.getBoundingClientRect().bottom + (divider.parentElement?.scrollTop ?? 0);
+      const next = Math.max(0, extra + headerBottom - dividerBottom);
+      if (Math.abs(extra - next) < 0.02) return;
       extra = next;
       divider.style.setProperty('--sheet-divider-offset', `${extra}px`);
     };
@@ -274,15 +277,17 @@ function FolderTitle({ folder, rowCount, sync, onChange, onDeleted }: FolderTitl
   if (editing) {
     return (
       <form className="titlebar" onSubmit={rename}>
-        <input
-          className="search title-input"
-          autoFocus
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => event.key === 'Escape' && setEditing(false)}
-          aria-label="Folder name"
-          maxLength={32}
-        />
+        <span className="field-sprinkle">
+          <input
+            className="search title-input"
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => event.key === 'Escape' && setEditing(false)}
+            aria-label="Folder name"
+            maxLength={32}
+          />
+        </span>
         <button className="btn" type="submit">Save</button>
         <button className="btn ghost" type="button" onClick={() => setEditing(false)}>Cancel</button>
       </form>
@@ -331,15 +336,17 @@ function SheetSort({ sort, onSort, holds, hasSales }: { sort: Sort; onSort: (sor
     <div className="sheet-sort">
       <label>
         <span>Sort by</span>
-        <select className="btn" value={sort.key} onChange={(event) => {
-          const option = options.find(([key]) => key === event.target.value);
-          if (option) onSort({ key: option[0], descending: option[0] !== 'name' });
-        }}>
-          {options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-        </select>
+        <span className="field-sprinkle">
+          <select className="btn" value={sort.key} onChange={(event) => {
+            const option = options.find(([key]) => key === event.target.value);
+            if (option) onSort({ key: option[0], descending: option[0] !== 'name' });
+          }}>
+            {options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select>
+        </span>
       </label>
       <button className="btn sq" aria-label={reverseLabel} title={reverseLabel} onClick={() => onSort({ ...sort, descending: !sort.descending })}>
-        {sort.descending ? '↓' : '↑'}
+        <span aria-hidden="true">{sort.descending ? '↓' : '↑'}</span>
       </button>
     </div>
   );
@@ -350,7 +357,7 @@ function Toolbar({ view, shown, total, holds, hasSales }: { view: SheetView; sho
   const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
   return (
     <div className="toolbar">
-      <label className="search-control">
+      <label className="search-control field-sprinkle">
         <Icon name="search" />
         <input
           type="search"
