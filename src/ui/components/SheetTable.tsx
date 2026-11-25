@@ -133,6 +133,7 @@ export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, 
   const showNet = !showMarketPrices || hasSales;
   const leadingColumns = 4 + Number(hasSales) + Number(showMarketPrices);
   const columnCount = leadingColumns + 1 + (hasSales ? 3 : 0) + (showMarketPrices ? 2 : 0) + Number(showNet);
+  const metricColumns = columnCount - (hasSales ? 4 : 3);
 
   const cancelHold = (pointer?: number) => {
     const pending = hold.current;
@@ -166,6 +167,7 @@ export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, 
     <table
       ref={table}
       className="sheet"
+      style={{ '--metric-columns': metricColumns } as CSSProperties}
       onPointerDownCapture={(event) => {
         if (!event.isPrimary) return;
         cancelHold();

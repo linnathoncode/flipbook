@@ -121,8 +121,6 @@ input {
 .fb {
   position: relative;
   height: 100%;
-  max-width: 1680px;
-  margin-inline: auto;
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr);
   grid-template-areas: 'nav main';
@@ -728,6 +726,21 @@ input {
   width: 1%;
   font-family: inherit;
   font-size: 12px;
+}
+
+@media (min-width: 1680px) {
+  .sheet th.n {
+    width: calc(63% / var(--metric-columns));
+  }
+
+  .sheet th.n:nth-child(-n + 3) {
+    width: clamp(80px, 5%, 136px);
+  }
+
+  .sheet-workspace .title-actions,
+  .sheet-workspace .tb-end {
+    margin-inline-start: 16px;
+  }
 }
 
 .fb[data-rows='compact'] .sheet tbody {
