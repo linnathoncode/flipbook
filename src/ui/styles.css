@@ -2749,9 +2749,7 @@ button:is(.btn, .chip):active:not(:disabled),
 
 @media (forced-colors: none) {
   .fb,
-  .nav,
-  .sheet-inspector,
-  .sheet-picker-list {
+  .nav {
     background-image: url('./surface-grain.png');
   }
 }
