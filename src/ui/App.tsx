@@ -220,6 +220,7 @@ export function App() {
         {isSheet(current) && (
           <SheetScreen
             key={currentFolderId ?? 'flips'}
+            adaptive={wideLayout === 'adaptive'}
             folder={folder}
             rows={rows}
             shown={shown}

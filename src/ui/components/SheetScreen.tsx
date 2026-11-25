@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from 'react';
 import { deleteFolder, renameFolder } from '../../app/actions';
 import { HOLDS_ID, isDefaultFolder, OTHER_ID, type Folder } from '../../domain/folders';
 import { ITEM_KINDS, itemKind, KIND_PLURAL } from '../../domain/itemKinds';
@@ -7,7 +7,7 @@ import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural, r
 import type { Selection } from '../useSelection';
 import { Icon } from './Icon';
 import { PageTurner } from './PageTurner';
-import { SheetTable, type FlipPricing, type RowDetail } from './SheetTable';
+import { SheetTable, TradeInspector, type FlipPricing, type RowDetail } from './SheetTable';
 import { Kpi } from './shared';
 import { TitleBar, type SyncProps } from './TitleBar';
 
@@ -42,6 +42,7 @@ export interface SheetView {
 }
 
 interface Props {
+  adaptive: boolean;
   /** Undefined for the Flips sheet. */
   folder?: Folder;
   /** Everything on this sheet, before filters. */
@@ -63,17 +64,45 @@ interface Props {
   onChange: () => void;
 }
 
-export function SheetScreen({ folder, rows, shown, hasSales, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag, onPickBuy, onFolderDeleted, onChange }: Props) {
+const WIDE_INSPECTOR = '(min-width: 1760px)';
+
+export function SheetScreen({ adaptive, folder, rows, shown, hasSales, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag, onPickBuy, onFolderDeleted, onChange }: Props) {
   const sheet = useRef<HTMLDivElement>(null);
+  const inspector = useRef<HTMLElement>(null);
+  const detailsId = useId();
+  const [expandedKey, setExpandedKey] = useState<string>();
+  const [wide, setWide] = useState(() => matchMedia(WIDE_INSPECTOR).matches);
+  useEffect(() => {
+    const query = matchMedia(WIDE_INSPECTOR);
+    const update = () => setWide(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   useSheetDivider(sheet);
   const pageCount = view.pageSize === 'all' ? 1 : Math.max(1, Math.ceil(shown.length / view.pageSize));
   const page = Math.min(view.page, pageCount - 1);
   const pageRows = view.pageSize === 'all' ? shown : shown.slice(page * view.pageSize, (page + 1) * view.pageSize);
   const filtered = !isUnfiltered(view.filter);
   const holds = folder?.id === HOLDS_ID;
+  const showInspector = adaptive && wide;
+  const expandedRow = pageRows.find((row) => row.key === expandedKey);
+  const toggleDetails = (key: string) => setExpandedKey((current) => current === key ? undefined : key);
+  const showFilters = () => {
+    if (!showInspector) {
+      view.toggleFilters();
+      return;
+    }
+    setExpandedKey(undefined);
+    inspector.current?.focus();
+  };
+  const closeDetails = () => {
+    sheet.current?.querySelector<HTMLButtonElement>('.row-disclosure[aria-expanded="true"]')?.focus();
+    setExpandedKey(undefined);
+  };
 
   return (
-    <div className="sheet-workspace" ref={sheet}>
+    <div className="sheet-workspace" ref={sheet} data-inspector={showInspector || undefined}>
       <header className="top">
         <FolderTitle folder={folder} rowCount={rows.length} sync={sync} onChange={onChange} onDeleted={onFolderDeleted} />
         <SheetNote folder={folder} />
@@ -84,14 +113,19 @@ export function SheetScreen({ folder, rows, shown, hasSales, view, selection, ne
       {selection.count > 0 ? (
         <SelectionBar count={selection.count} onMoveMenu={onMoveMenu} moveMenuOpen={moveMenuOpen} onClear={selection.clear} />
       ) : (
-        <Toolbar view={view} shown={shown.length} total={rows.length} holds={holds} hasSales={hasSales} />
+        <Toolbar view={view} shown={shown.length} total={rows.length} holds={holds} hasSales={hasSales}
+          inspectorId={showInspector ? detailsId : undefined} onFilters={showFilters} />
       )}
-      {view.filtersOpen && <Filters rows={rows} filter={view.filter} onChange={view.setFilter} />}
+      {!showInspector && view.filtersOpen && <Filters rows={rows} filter={view.filter} onChange={view.setFilter} />}
       <div className="tablewrap">
         <SheetTable
           rows={pageRows}
           allRows={shown}
           hasSales={hasSales}
+          expandedKey={expandedRow?.key}
+          detailsId={detailsId}
+          inlineDetails={!showInspector}
+          onToggleDetails={toggleDetails}
           detail={view.detail}
           showMarketPrices={holds}
           sort={view.sort}
@@ -112,6 +146,18 @@ export function SheetScreen({ folder, rows, shown, hasSales, view, selection, ne
         />
       </div>
       {shown.length > SMALLEST_PAGE && <Pager view={view} page={page} pageCount={pageCount} total={shown.length} />}
+      {showInspector && (
+        <aside className="sheet-inspector" id={detailsId} ref={inspector} tabIndex={-1}
+          aria-label={expandedRow ? 'Trade details' : 'Filters'}>
+          <div className="sheet-inspector-header">
+            <h2>{expandedRow ? 'Trade details' : 'Filters'}</h2>
+            {expandedRow && <button className="btn sq ghost" onClick={closeDetails} aria-label="Close trade details" title="Close trade details">×</button>}
+          </div>
+          {expandedRow
+            ? <TradeInspector row={expandedRow} showMarketPrices={holds} pricing={flipPricing} />
+            : <Filters rows={rows} filter={view.filter} onChange={view.setFilter} />}
+        </aside>
+      )}
     </div>
   );
 }
@@ -352,7 +398,9 @@ function SheetSort({ sort, onSort, holds, hasSales }: { sort: Sort; onSort: (sor
   );
 }
 
-function Toolbar({ view, shown, total, holds, hasSales }: { view: SheetView; shown: number; total: number; holds: boolean; hasSales: boolean }) {
+function Toolbar({ view, shown, total, holds, hasSales, inspectorId, onFilters }: {
+  view: SheetView; shown: number; total: number; holds: boolean; hasSales: boolean; inspectorId?: string; onFilters: () => void;
+}) {
   const { kinds, result, excludedKinds, excludedResults } = view.filter;
   const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
   return (
@@ -369,7 +417,7 @@ function Toolbar({ view, shown, total, holds, hasSales }: { view: SheetView; sho
           autoComplete="off"
         />
       </label>
-      <button className="btn" aria-expanded={view.filtersOpen} aria-controls="filters" onClick={view.toggleFilters}>
+      <button className="btn" aria-expanded={inspectorId ? undefined : view.filtersOpen} aria-controls={inspectorId ?? 'filters'} onClick={onFilters}>
         <Icon name="filter" /> Filters{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
       </button>
       <SheetSort sort={view.sort} onSort={view.setSort} holds={holds} hasSales={hasSales} />

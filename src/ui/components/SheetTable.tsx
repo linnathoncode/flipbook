@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
 import { adjustedFloat, floatRange, type FloatRange } from '../../domain/floatRanges';
 import { totalRows, type ListedFor, type PricedAt, type SheetRow, type Sort } from '../../domain/listFilters';
 import { itemPriceKey, type PriceQuote } from '../../domain/prices';
@@ -28,6 +28,10 @@ interface Props {
   /** Every row that passed the filters; the totals cover all of them, not just this page. */
   allRows: SheetRow[];
   hasSales: boolean;
+  expandedKey?: string;
+  detailsId: string;
+  inlineDetails: boolean;
+  onToggleDetails: (key: string) => void;
   detail: RowDetail;
   showMarketPrices: boolean;
   sort: Sort;
@@ -107,12 +111,10 @@ function useOutcomeEntry(table: RefObject<HTMLTableElement>, rows: SheetRow[]) {
   return { entry: current, finish: () => setIntro(undefined) };
 }
 
-export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, sort, onSort, selection, newSince, flipPricing, empty, onRowMenu, onRowDrag, onPickBuy }: Props) {
+export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsId, inlineDetails, onToggleDetails, detail, showMarketPrices, sort, onSort, selection, newSince, flipPricing, empty, onRowMenu, onRowDrag, onPickBuy }: Props) {
   const detailed = detail === 'detailed';
   const table = useRef<HTMLTableElement>(null);
   const { entry: outcomeEntry, finish: finishOutcomeEntry } = useOutcomeEntry(table, rows);
-  const [expandedKey, setExpandedKey] = useState<string>();
-  const detailsId = useId();
   const hold = useRef<{ pointer: number; x: number; y: number; timer: ReturnType<typeof setTimeout> }>();
   const suppressClick = useRef(false);
   const visible = rows.map(rowEntry);
@@ -161,8 +163,6 @@ export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, 
       cancelHold(event.pointerId);
     }
   };
-  const toggleDetails = (key: string) => setExpandedKey((current) => current === key ? undefined : key);
-
   return (
     <HoverCardProvider>
     <table
@@ -225,7 +225,7 @@ export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, 
             if (selection.count || add || event.shiftKey) {
               selection.click(entry, { add: add || !event.shiftKey, range: event.shiftKey }, visible);
             } else {
-              toggleDetails(row.key);
+              onToggleDetails(row.key);
             }
           };
           return (
@@ -284,7 +284,7 @@ export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, 
                 <td>
                   <div className="item-with-disclosure">
                     <button className="row-disclosure" aria-label={`Details for ${row.item.marketHashName}`} aria-expanded={expanded}
-                      aria-controls={expanded ? detailsId : undefined} onClick={() => toggleDetails(row.key)}>
+                      aria-controls={expanded || !inlineDetails ? detailsId : undefined} onClick={() => onToggleDetails(row.key)}>
                       <span aria-hidden="true">›</span>
                     </button>
                     <ItemCell row={row} detailed={detailed} isNew={isNew} pricing={row.status === 'open' && !showMarketPrices ? flipPricing : undefined} />
@@ -315,7 +315,7 @@ export function SheetTable({ rows, allRows, hasSales, detail, showMarketPrices, 
                   </td>
                 )}
               </tr>
-              {expanded && (
+              {expanded && inlineDetails && (
                 <tr className="trade-detail-row" id={detailsId}>
                   <td colSpan={columnCount}><TradeDetails row={row} /></td>
                 </tr>
@@ -401,7 +401,34 @@ function MarketPrices({ item, quote, onCheck, busy, disabled }: { item: Item; qu
   );
 }
 
-function TradeDetails({ row }: { row: SheetRow }) {
+export function TradeInspector({ row, showMarketPrices, pricing }: { row: SheetRow; showMarketPrices: boolean; pricing?: FlipPricing }) {
+  const title = itemTitle(row.item, (row.sell ?? row.buy)?.source);
+  const open = row.status === 'open';
+  return (
+    <HoverCardProvider>
+      <div className="trade-inspector" key={row.key}>
+        <div>
+          <h3>{title.name}</h3>
+          <p className="hint">{[title.longDetail, open ? 'Open' : row.status === 'closed' ? 'Closed' : 'Unpaired sale'].filter(Boolean).join(' · ')}</p>
+        </div>
+        {row.net !== undefined && (
+          <div className="inspector-profit">
+            <span>Net profit</span>
+            <strong className={`pl ${signClass(row.net)}`}>
+              {formatSignedMoney(row.net)}{row.percent !== undefined && ` · ${formatPercent(row.percent)}`}
+            </strong>
+          </div>
+        )}
+        <TradeDetails row={row} inspector />
+        <MarketActions row={row} pricing={open && !showMarketPrices ? pricing : undefined} />
+        {open && showMarketPrices && <MarketPrices item={row.item} quote={row.marketQuote}
+          onCheck={pricing && (() => pricing.onPrice(row))} busy={pricing?.active === row.key} disabled={pricing?.active !== undefined} />}
+      </div>
+    </HoverCardProvider>
+  );
+}
+
+function TradeDetails({ row, inspector = false }: { row: SheetRow; inspector?: boolean }) {
   const { item, quote } = row;
   const facts: [string, ReactNode][] = [
     ['Adj. float', adjustedFloat(item) === undefined ? null : <AdjustedFloatCell item={item} />],
@@ -415,6 +442,14 @@ function TradeDetails({ row }: { row: SheetRow }) {
     ['Match', <MatchLabel row={row} />],
     ['If sold now', quote && <Estimate quote={quote} signed={quote.net}>{formatSignedMoney(quote.net)} ({formatPercent(quote.percent)})</Estimate>],
   ];
+  if (inspector) {
+    facts.push(
+      ['Float', formatFloat(item.floatValue, 6)],
+      ['Buy', formatMoney(row.buyPrice)],
+      ['Sell', formatMoney(row.sellPrice)],
+      ['Fee', formatMoney(row.fee)],
+    );
+  }
   const available = facts.filter(([, value]) => value != null && value !== '');
   return (
     <dl className="trade-details">
