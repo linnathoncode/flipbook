@@ -35,8 +35,8 @@ describe('analyze', () => {
     expect(data.topThreeGainShare).toBe(1);
     expect(data.medianHeldDays).toBe(7);
     expect(data.byHold.slice(0, 2)).toEqual([
-      { label: '0-7 days', count: 1, net: -3 },
-      { label: '8-30 days', count: 1, net: 5 },
+      { label: '0-7 days', count: 1, net: -3, sellIds: [biggerLoss.sell.id] },
+      { label: '8-30 days', count: 1, net: 5, sellIds: [win.sell.id] },
     ]);
   });
 
@@ -49,11 +49,14 @@ describe('analyze', () => {
     const data = analyze([win, loss, old], [], 'all', NOW);
     expect(data.byMonth.map((month) => month.month)).toEqual(monthsBetween('2026-02-01', '2026-10-15'));
     expect(data.byMonth.find((month) => month.month === '2026-05')!.net).toBe(0);
+    expect(data.byMonth.find((month) => month.month === '2026-05')!.sellIds).toEqual([]);
+    expect(data.byMonth.find((month) => month.month === '2026-09')!.sellIds).toEqual([win.sell.id]);
   });
 
   it('groups by kind and ranks best and worst', () => {
     const data = analyze([win, loss], [], '90d', NOW);
     expect(data.byKind.map((group) => group.kind)).toEqual(['rifle', 'sticker']);
+    expect(data.byKind.map((group) => group.sellIds)).toEqual([[win.sell.id], [loss.sell.id]]);
     expect(data.best).toEqual([win]);
     expect(data.worst).toEqual([loss]);
   });

@@ -64,7 +64,7 @@ export function CumulativeChart({ data }: { data: Analytics }) {
   );
 }
 
-export function MonthChart({ data }: { data: Analytics }) {
+export function MonthChart({ data, onOpen }: { data: Analytics; onOpen: (month: Analytics['byMonth'][number]) => void }) {
   const [width, height, left, right, top, bottom] = [380, 240, 46, 6, 22, 36];
   const values = data.byMonth.map((month) => month.net);
   const scale = ticks(Math.min(0, ...values), Math.max(1, ...values), 4);
@@ -78,10 +78,8 @@ export function MonthChart({ data }: { data: Analytics }) {
   // The first bar names its year too, unless a January right after it would collide with that label.
   const firstJanuary = data.byMonth.findIndex((month) => monthOf(month.month) === 0);
   const firstJanuaryGap = firstJanuary === -1 ? Infinity : firstJanuary;
-  const monthsWithSales = new Set(data.closed.map((flip) => flip.sell.at.slice(0, 7)));
-
   return (
-    <svg className="chart" style={{ maxWidth: width * CHART_STRETCH }} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Net profit by month">
+    <svg className="chart" style={{ maxWidth: width * CHART_STRETCH }} viewBox={`0 0 ${width} ${height}`} role="group" aria-label="Net profit by month">
       {scale.map((value) => (
         <g key={value}>
           <line className={value === 0 ? 'ch-zero' : 'ch-grid'} x1={left} x2={width - right} y1={y(value)} y2={y(value)} />
@@ -93,14 +91,25 @@ export function MonthChart({ data }: { data: Analytics }) {
         const net = roundTo(month.net, 2);
         const barTop = y(Math.max(net, 0));
         const barHeight = Math.abs(y(net) - y(0));
+        const hasSales = month.sellIds.length > 0;
         return (
-          <g key={month.month}>
+          <g key={month.month} className={hasSales ? 'chart-month-action' : undefined}
+            role={hasSales ? 'button' : undefined} tabIndex={hasSales ? 0 : undefined}
+            aria-label={hasSales ? `View ${plural(month.sellIds.length, 'trade')} in ${formatMonth(month.month)} ${month.month.slice(0, 4)}, ${formatSignedMoney(net)} net` : undefined}
+            onClick={hasSales ? () => onOpen(month) : undefined}
+            onKeyDown={hasSales ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onOpen(month);
+              }
+            } : undefined}>
+            {hasSales && <rect className="chart-month-hit" x={center - band / 2} y={top} width={band} height={height - top - 2} rx={3} />}
             {net !== 0 && (
               <rect className={net > 0 ? 'ch-pos' : 'ch-neg'} x={center - barWidth / 2} y={barTop} width={barWidth} height={Math.max(1, barHeight)} rx={2}>
                 <title>{`${formatMonth(month.month)}: ${formatSignedMoney(net)}`}</title>
               </rect>
             )}
-            {net === 0 && monthsWithSales.has(month.month) && (
+            {net === 0 && hasSales && (
               <circle className="ch-neutral" cx={center} cy={y(0)} r={2.5}><title>{formatMonth(month.month)}: $0.00 net</title></circle>
             )}
             {labelled && net !== 0 && (
@@ -132,26 +141,32 @@ function monthStep(band: number): number {
 /** 0 for January through 11 for December, from "2026-03". */
 const monthOf = (month: string) => Number(month.slice(5, 7)) - 1;
 
-export function KindBars({ data }: { data: Analytics }) {
-  return <NetBars rows={data.byKind.map(({ kind, count, net }) => ({ label: KIND_PLURAL[kind], count, net }))} />;
+export function KindBars({ data, onOpen }: { data: Analytics; onOpen: (label: string, sellIds: string[]) => void }) {
+  return <NetBars rows={data.byKind.map(({ kind, ...group }) => ({ ...group, label: KIND_PLURAL[kind] }))} onOpen={onOpen} />;
 }
 
-export function NetBars({ rows }: { rows: { label: string; count: number; net: number }[] }) {
+export function NetBars({ rows, onOpen }: {
+  rows: { label: string; count: number; net: number; sellIds: string[] }[];
+  onOpen: (label: string, sellIds: string[]) => void;
+}) {
   const largest = Math.max(0.01, ...rows.map((row) => Math.abs(row.net)));
   if (rows.length === 0) return null;
 
   return (
     <div className="trows">
       <div className="trow trow-axis" aria-hidden="true"><span>$0</span></div>
-      {rows.map(({ label, count, net }) => (
-        <div key={label} className="trow">
+      {rows.map(({ label, count, net, sellIds }) => {
+        const content = <>
           <span className="trow-label">{label}<small>{plural(count, 'trade')}</small></span>
-          <div className="ttrack" aria-hidden="true">
+          <span className="ttrack" aria-hidden="true">
             {net !== 0 && <i className={net > 0 ? 'pos' : 'neg'} style={{ width: `${(Math.abs(net) / largest) * 50}%` }} />}
-          </div>
+          </span>
           <span className={`n pl ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`}>{count ? formatSignedMoney(net) : '\u2014'}</span>
-        </div>
-      ))}
+        </>;
+        return count
+          ? <button key={label} className="trow analytics-row-link" onClick={() => onOpen(label, sellIds)}>{content}</button>
+          : <div key={label} className="trow">{content}</div>;
+      })}
     </div>
   );
 }

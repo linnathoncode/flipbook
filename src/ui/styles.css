@@ -767,6 +767,23 @@ input {
   margin-inline: 0;
 }
 
+.sheet-inspector .filter-mode {
+  margin-inline-end: auto;
+}
+
+.analytics-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analytics-scope > div {
+  display: grid;
+  gap: 2px;
+  margin-inline-end: 10px;
+}
+
 .sheet-inspector .flabel:not(:first-child) {
   margin-block-start: 8px;
 }
@@ -1160,7 +1177,6 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
-/* Checkboxes stay out of sight until a row is pointed at or something is selected. */
 .chk {
   width: 22px;
   padding-left: 16px !important;
@@ -1173,12 +1189,14 @@ input {
   margin: 0;
   cursor: pointer;
   accent-color: var(--accent);
-  opacity: 0;
+  opacity: 0.65;
   transition: opacity 0.12s;
 }
 
 .row:hover .chk input,
 .fb.has-sel .chk input,
+.chk input:checked,
+.chk input:indeterminate,
 .chk input:focus-visible,
 thead:hover .chk input {
   opacity: 1;
@@ -2051,6 +2069,45 @@ a.market-link:active {
   fill: var(--muted);
 }
 
+.chart-month-action {
+  cursor: pointer;
+}
+
+.chart-month-hit {
+  fill: transparent;
+}
+
+.chart-month-action:is(:hover, :focus-visible) .chart-month-hit {
+  fill: var(--hover);
+}
+
+.chart-month-action:focus-visible .chart-month-hit {
+  stroke: var(--accent);
+}
+
+.analytics-row-link {
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.analytics-row-link:is(:hover, :focus-visible) {
+  background: var(--hover);
+}
+
+.trows button.analytics-row-link {
+  padding: 4px 0;
+}
+
+.analytics-row-link .trow-label,
+.flist .analytics-row-link .nm {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .trow > span:first-child {
   font-weight: 500;
 }
@@ -2100,11 +2157,15 @@ a.market-link:active {
 }
 
 .flist li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.flist .analytics-row-link {
+  width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px 12px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--rule);
 }
 
 .flist li:last-child {
@@ -2216,7 +2277,7 @@ a.market-link:active {
   padding: 4px 0;
 }
 
-@media (min-width: 761px) {
+@media (min-width: 961px) {
   .fb:has(.sheet-workspace) .nav-gap {
     margin-inline: calc(-1 * var(--nav-gutter));
     margin-block-start: calc(12px + var(--sheet-divider-offset, 0px));
@@ -2253,7 +2314,7 @@ a.market-link:active {
 
 /* ---------- Narrow windows ---------- */
 
-@media (max-width: 760px) {
+@media (max-width: 960px) {
   .fb {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
@@ -2338,6 +2399,21 @@ a.market-link:active {
 
   .settings-row {
     gap: 12px;
+  }
+
+  .sheet :is(th, td) {
+    padding-inline: 6px;
+  }
+
+  .item-with-disclosure {
+    min-width: 200px;
+  }
+}
+
+@media (max-width: 620px) {
+  .kpi {
+    border-inline-start: 0;
+    padding-inline: 0;
   }
 }
 

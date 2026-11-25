@@ -29,7 +29,7 @@ export interface Analytics {
   medianHeldDays?: number;
   outcomes: { profitable: number; flops: number; even: number; gains: number; losses: number };
   topThreeGainShare?: number;
-  byHold: { label: string; net: number; count: number }[];
+  byHold: { label: string; net: number; count: number; sellIds: string[] }[];
   winRate?: number;
   averagePercent?: number;
   averageHeldDays?: number;
@@ -38,9 +38,9 @@ export interface Analytics {
   /** Running net profit after each sale. */
   cumulative: { at: string; total: number }[];
   /** Every month in the span, "2026-10", including months with no sales. */
-  byMonth: { month: string; net: number }[];
+  byMonth: { month: string; net: number; sellIds: string[] }[];
   /** Best kind first. */
-  byKind: { kind: ItemKind; net: number; count: number }[];
+  byKind: { kind: ItemKind; net: number; count: number; sellIds: string[] }[];
   best: Flip[];
   worst: Flip[];
 }
@@ -84,10 +84,10 @@ export function analyze(flips: Flip[], openBuys: Trade[], period: AnalyticsPerio
     averageHeldDays: held.length ? average(held) : undefined,
     openCost: centsToDollars(openBuys.reduce((sum, buy) => sum + buy.priceCents, 0)),
     cumulative,
-    byMonth: monthsBetween(from, to).map((month) => ({
-      month,
-      net: sumNet(closed.filter((flip) => flip.sell.at.startsWith(month))),
-    })),
+    byMonth: monthsBetween(from, to).map((month) => {
+      const trades = closed.filter((flip) => flip.sell.at.startsWith(month));
+      return { month, net: sumNet(trades), sellIds: trades.map((flip) => flip.sell.id) };
+    }),
     byKind: groupByKind(closed),
     best: profitable.slice(0, RANKED),
     worst: flops.reverse().slice(0, RANKED),
@@ -107,7 +107,7 @@ export function monthsBetween(fromIso: string, toIso: string): string[] {
 }
 
 function groupByHold(flips: Flip[]) {
-  const buckets = HOLD_BUCKETS.map(({ label }) => ({ label, count: 0, net: 0 }));
+  const buckets = HOLD_BUCKETS.map(({ label }) => ({ label, count: 0, net: 0, sellIds: [] as string[] }));
   for (const flip of flips) {
     const days = heldDays(flip);
     if (days === undefined) continue;
@@ -115,6 +115,7 @@ function groupByHold(flips: Flip[]) {
     if (!bucket) continue;
     bucket.count += 1;
     bucket.net += flip.netProfit;
+    bucket.sellIds.push(flip.sell.id);
   }
   return buckets;
 }
@@ -126,12 +127,13 @@ function median(values: number[]) {
 }
 
 function groupByKind(flips: Flip[]) {
-  const groups = new Map<ItemKind, { kind: ItemKind; net: number; count: number }>();
+  const groups = new Map<ItemKind, Analytics['byKind'][number]>();
   flips.forEach((flip) => {
     const kind = itemKind(flip.buy.item);
-    const group = groups.get(kind) ?? { kind, net: 0, count: 0 };
+    const group = groups.get(kind) ?? { kind, net: 0, count: 0, sellIds: [] };
     group.net += flip.netProfit;
     group.count += 1;
+    group.sellIds.push(flip.sell.id);
     groups.set(kind, group);
   });
   return [...groups.values()].sort((a, b) => b.net - a.net);

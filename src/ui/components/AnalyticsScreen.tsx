@@ -3,7 +3,7 @@ import { analyze, ANALYTICS_PERIODS, type Analytics, type AnalyticsPeriod } from
 import { HOLDS_ID, OTHER_ID } from '../../domain/folders';
 import { sectionRows, totalRows } from '../../domain/listFilters';
 import { centsToDollars, heldDays, type Flip } from '../../domain/profit';
-import { formatDate, formatMoney, formatPercent, formatSignedMoney, plural } from '../format';
+import { formatDate, formatMoney, formatMonth, formatPercent, formatSignedMoney, plural } from '../format';
 import { usePreference } from '../usePreference';
 import { CumulativeChart, KindBars, MonthChart, NetBars } from './charts';
 import { itemTitle, Kpi, signClass } from './shared';
@@ -11,17 +11,32 @@ import { TitleBar, type SyncProps } from './TitleBar';
 
 const PERIOD_LABEL: Record<AnalyticsPeriod, string> = { '30d': '30 days', '90d': '90 days', all: 'All' };
 
+export interface AnalyticsDrilldown {
+  label: string;
+  period: string;
+  sellIds: ReadonlySet<string>;
+  inspectSellId?: string;
+}
+
 interface Props {
   journal: Journal;
   sync: SyncProps;
+  onOpenTrades: (drilldown: AnalyticsDrilldown) => void;
 }
 
-export function AnalyticsScreen({ journal, sync }: Props) {
+export function AnalyticsScreen({ journal, sync, onOpenTrades }: Props) {
   const [period, setPeriod] = usePreference<AnalyticsPeriod>('analytics-period', '90d');
   const { book } = journal.shelved;
   const now = new Date();
   const data = analyze(book.flips, book.openBuys, period, now);
   const closed = data.closed.length;
+  const openGroup = (label: string, sellIds: string[], inspectSellId?: string) => onOpenTrades({
+    label,
+    period: period === 'all' ? 'All time' : PERIOD_LABEL[period],
+    sellIds: new Set(sellIds),
+    inspectSellId,
+  });
+  const openFlip = (flip: Flip) => openGroup(itemTitle(flip.sell.item, flip.sell.source).name, [flip.sell.id], flip.sell.id);
 
   return (
     <>
@@ -57,26 +72,26 @@ export function AnalyticsScreen({ journal, sync }: Props) {
             <OutcomeSummary data={data} />
             <section className="card">
               <h2>By month</h2>
-              <p className="note">Net profit by sale month.</p>
-              <MonthChart data={data} />
+              <p className="note">Select a month to view its trades.</p>
+              <MonthChart data={data} onOpen={({ month, sellIds }) => openGroup(`${formatMonth(month)} ${month.slice(0, 4)}`, sellIds)} />
             </section>
             <section className="card">
               <h2>By item type</h2>
-              <p className="note">Net profit grouped by item type.</p>
-              <KindBars data={data} />
+              <p className="note">Select an item type to view its trades.</p>
+              <KindBars data={data} onOpen={openGroup} />
             </section>
             <section className="card">
               <h2>Best flips</h2>
-              <FlipList flips={data.best} empty="No profitable flips in this period." />
+              <FlipList flips={data.best} empty="No profitable flips in this period." onOpen={openFlip} />
             </section>
             <section className="card">
               <h2>Biggest flops</h2>
-              <FlipList flips={data.worst} empty="No flops in this period." />
+              <FlipList flips={data.worst} empty="No flops in this period." onOpen={openFlip} />
             </section>
             <section className="card span2">
               <h2>By holding time</h2>
-              <p className="note">Net profit by days between buy and sale.</p>
-              <NetBars rows={data.byHold} />
+                <p className="note">Select a holding period to view its trades.</p>
+                <NetBars rows={data.byHold} onOpen={(label, sellIds) => openGroup(`Held ${label}`, sellIds)} />
             </section>
           </div>
         )}
@@ -163,7 +178,7 @@ function Metric({ label, value, sign }: { label: string; value: string; sign?: n
   return <div><dt>{label}</dt><dd className={`pl ${signClass(sign)}`}>{value}</dd></div>;
 }
 
-function FlipList({ flips, empty }: { flips: Flip[]; empty: string }) {
+function FlipList({ flips, empty, onOpen }: { flips: Flip[]; empty: string; onOpen: (flip: Flip) => void }) {
   if (flips.length === 0) return <p className="note flush">{empty}</p>;
   return (
     <ol className="flist">
@@ -172,10 +187,12 @@ function FlipList({ flips, empty }: { flips: Flip[]; empty: string }) {
         const held = heldDays(flip);
         return (
           <li key={flip.sell.id}>
-            <span className="nm">{title.detail ? `${title.name} (${title.detail})` : title.name}</span>
-            <span className={`n pl ${signClass(flip.netProfit)}`}>{formatSignedMoney(flip.netProfit)}</span>
-            <span className="s">{held === undefined ? '' : `Held ${plural(held, 'day')}, `}sold {formatDate(flip.sell.at)}</span>
-            <span className="s n">{formatPercent(flip.profitPercent)}</span>
+            <button className="analytics-row-link" onClick={() => onOpen(flip)}>
+              <span className="nm">{title.detail ? `${title.name} (${title.detail})` : title.name} <span aria-hidden="true">›</span></span>
+              <span className={`n pl ${signClass(flip.netProfit)}`}>{formatSignedMoney(flip.netProfit)}</span>
+              <span className="s">{held === undefined ? '' : `Held ${plural(held, 'day')}, `}sold {formatDate(flip.sell.at)}</span>
+              <span className="s n">{formatPercent(flip.profitPercent)}</span>
+            </button>
           </li>
         );
       })}

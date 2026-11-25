@@ -5,6 +5,7 @@ import { ITEM_KINDS, itemKind, KIND_PLURAL } from '../../domain/itemKinds';
 import { clearChips, EMPTY_FILTER, isNarrowed, isUnfiltered, pickResult, toggleExcludedKind, toggleExcludedResult, toggleKind, totalRows, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
 import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural, roundTo } from '../format';
 import type { Selection } from '../useSelection';
+import type { AnalyticsDrilldown } from './AnalyticsScreen';
 import { Icon } from './Icon';
 import { PageTurner } from './PageTurner';
 import { SheetTable, TradeInspector, type FlipPricing, type RowDetail } from './SheetTable';
@@ -43,6 +44,13 @@ export interface SheetView {
 
 interface Props {
   adaptive: boolean;
+  expandedKey?: string;
+  detailsTrigger: RefObject<HTMLButtonElement>;
+  onToggleDetails: (key: string) => void;
+  onCloseDetails: () => void;
+  drilldown?: AnalyticsDrilldown;
+  onBackToAnalytics: () => void;
+  onClearDrilldown: () => void;
   /** Undefined for the Flips sheet. */
   folder?: Folder;
   /** Everything on this sheet, before filters. */
@@ -66,11 +74,16 @@ interface Props {
 
 const WIDE_INSPECTOR = '(min-width: 1760px)';
 
-export function SheetScreen({ adaptive, folder, rows, shown, hasSales, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag, onPickBuy, onFolderDeleted, onChange }: Props) {
+export function SheetScreen({
+  adaptive, expandedKey, detailsTrigger, onToggleDetails, onCloseDetails, drilldown, onBackToAnalytics, onClearDrilldown,
+  folder, rows, shown, hasSales, view, selection, newSince, sync, onMoveMenu, moveMenuOpen, flipPricing, onRowMenu, onRowDrag,
+  onPickBuy, onFolderDeleted, onChange,
+}: Props) {
   const sheet = useRef<HTMLDivElement>(null);
   const inspector = useRef<HTMLElement>(null);
+  const scope = useRef<HTMLDivElement>(null);
   const detailsId = useId();
-  const [expandedKey, setExpandedKey] = useState<string>();
+  useEffect(() => { if (drilldown) scope.current?.focus(); }, [drilldown]);
   const [wide, setWide] = useState(() => matchMedia(WIDE_INSPECTOR).matches);
   useEffect(() => {
     const query = matchMedia(WIDE_INSPECTOR);
@@ -87,18 +100,13 @@ export function SheetScreen({ adaptive, folder, rows, shown, hasSales, view, sel
   const holds = folder?.id === HOLDS_ID;
   const showInspector = adaptive && wide;
   const expandedRow = pageRows.find((row) => row.key === expandedKey);
-  const toggleDetails = (key: string) => setExpandedKey((current) => current === key ? undefined : key);
   const showFilters = () => {
     if (!showInspector) {
       view.toggleFilters();
       return;
     }
-    setExpandedKey(undefined);
+    if (expandedRow) onToggleDetails(expandedRow.key);
     inspector.current?.focus();
-  };
-  const closeDetails = () => {
-    sheet.current?.querySelector<HTMLButtonElement>('.row-disclosure[aria-expanded="true"]')?.focus();
-    setExpandedKey(undefined);
   };
 
   return (
@@ -106,26 +114,35 @@ export function SheetScreen({ adaptive, folder, rows, shown, hasSales, view, sel
       <header className="top">
         <FolderTitle folder={folder} rowCount={rows.length} sync={sync} onChange={onChange} onDeleted={onFolderDeleted} />
         <SheetNote folder={folder} />
-        <div className={folder?.id === HOLDS_ID ? 'kpis holds-kpis' : 'kpis'}>
-          <SheetKpis folder={folder} rows={rows} sync={sync} />
-        </div>
+        {drilldown ? (
+          <div className="analytics-scope" ref={scope} tabIndex={-1} aria-label="Analytics selection">
+            <div><strong>{drilldown.label}</strong><span className="hint">{drilldown.period} · {plural(drilldown.sellIds.size, 'trade')}</span></div>
+            <button className="btn" onClick={onBackToAnalytics}>‹ Analytics</button>
+            <button className="btn ghost" onClick={onClearDrilldown}>Clear Analytics filter</button>
+          </div>
+        ) : (
+          <div className={folder?.id === HOLDS_ID ? 'kpis holds-kpis' : 'kpis'}>
+            <SheetKpis folder={folder} rows={rows} sync={sync} />
+          </div>
+        )}
       </header>
       {selection.count > 0 ? (
         <SelectionBar count={selection.count} onMoveMenu={onMoveMenu} moveMenuOpen={moveMenuOpen} onClear={selection.clear} />
       ) : (
         <Toolbar view={view} shown={shown.length} total={rows.length} holds={holds} hasSales={hasSales}
-          inspectorId={showInspector ? detailsId : undefined} onFilters={showFilters} />
+          inspectorId={showInspector ? detailsId : undefined} filtersVisible={showInspector ? !expandedRow : view.filtersOpen} onFilters={showFilters} />
       )}
       {!showInspector && view.filtersOpen && <Filters rows={rows} filter={view.filter} onChange={view.setFilter} />}
-      <div className="tablewrap">
+      <div className="tablewrap" role="region" aria-label="Trade ledger" tabIndex={0}>
         <SheetTable
           rows={pageRows}
           allRows={shown}
           hasSales={hasSales}
           expandedKey={expandedRow?.key}
+          detailsTrigger={detailsTrigger}
           detailsId={detailsId}
           inlineDetails={!showInspector}
-          onToggleDetails={toggleDetails}
+          onToggleDetails={onToggleDetails}
           detail={view.detail}
           showMarketPrices={holds}
           sort={view.sort}
@@ -137,7 +154,7 @@ export function SheetScreen({ adaptive, folder, rows, shown, hasSales, view, sel
             filtered ? (
               <>No rows match. <button className="btn ghost" onClick={() => view.setFilter(EMPTY_FILTER)}>Clear search and filters</button></>
             ) : (
-              emptyText(folder)
+              drilldown ? 'No trades from this Analytics selection remain in Flips.' : emptyText(folder)
             )
           }
           onRowMenu={onRowMenu}
@@ -151,7 +168,7 @@ export function SheetScreen({ adaptive, folder, rows, shown, hasSales, view, sel
           aria-label={expandedRow ? 'Trade details' : 'Filters'}>
           <div className="sheet-inspector-header">
             <h2>{expandedRow ? 'Trade details' : 'Filters'}</h2>
-            {expandedRow && <button className="btn sq ghost" onClick={closeDetails} aria-label="Close trade details" title="Close trade details">×</button>}
+            {expandedRow && <button className="btn ghost" onClick={onCloseDetails}>Back to filters</button>}
           </div>
           {expandedRow
             ? <TradeInspector row={expandedRow} showMarketPrices={holds} pricing={flipPricing} />
@@ -204,10 +221,10 @@ function emptyText(folder?: Folder): string {
 function SheetNote({ folder }: { folder?: Folder }) {
   if (!folder) return null;
   if (folder.id === OTHER_ID) {
-    return <p className="note">Sales with no buy on record land here on their own. If one of them was a real flip, move it back to Flips.</p>;
+    return <p className="note">Sales with no buy on record land here on their own. To file a sale under Flips, select its row and choose Move to.</p>;
   }
   if (folder.id === HOLDS_ID) {
-    return <p className="note">Items you bought to keep or use. They don't count toward your flip totals. Move one back to Flips when you decide to sell it.</p>;
+    return <p className="note">Items you bought to keep or use. They don't count toward your flip totals. When you decide to sell an item, select its row and choose Move to.</p>;
   }
   return <p className="note">Nothing in this folder counts toward your flip totals or the export.</p>;
 }
@@ -394,8 +411,9 @@ function SheetSort({ sort, onSort, holds, hasSales }: { sort: Sort; onSort: (sor
   );
 }
 
-function Toolbar({ view, shown, total, holds, hasSales, inspectorId, onFilters }: {
-  view: SheetView; shown: number; total: number; holds: boolean; hasSales: boolean; inspectorId?: string; onFilters: () => void;
+function Toolbar({ view, shown, total, holds, hasSales, inspectorId, filtersVisible, onFilters }: {
+  view: SheetView; shown: number; total: number; holds: boolean; hasSales: boolean; inspectorId?: string;
+  filtersVisible: boolean; onFilters: () => void;
 }) {
   const { kinds, result, excludedKinds, excludedResults } = view.filter;
   const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
@@ -413,7 +431,7 @@ function Toolbar({ view, shown, total, holds, hasSales, inspectorId, onFilters }
           autoComplete="off"
         />
       </label>
-      <button className="btn" aria-expanded={inspectorId ? undefined : view.filtersOpen} aria-controls={inspectorId ?? 'filters'} onClick={onFilters}>
+      <button className="btn" aria-expanded={filtersVisible} aria-controls={inspectorId ?? 'filters'} onClick={onFilters}>
         <Icon name="filter" /> Filters{activeFilters > 0 && <span className="badge">{activeFilters}</span>}
       </button>
       <SheetSort sort={view.sort} onSort={view.setSort} holds={holds} hasSales={hasSales} />
@@ -451,6 +469,7 @@ function SelectionBar({ count, onMoveMenu, moveMenuOpen, onClear }: SelectionBar
 
 /** Only the kinds on this sheet get a chip. */
 function Filters({ rows, filter, onChange }: { rows: SheetRow[]; filter: ListFilter; onChange: (filter: ListFilter) => void }) {
+  const [excluding, setExcluding] = useState(false);
   const present = new Set(rows.map((row) => itemKind(row.item)));
   const kinds = ITEM_KINDS.filter((kind) => present.has(kind) || filter.kinds.includes(kind) || filter.excludedKinds.includes(kind));
   const hide = (event: MouseEvent, next: ListFilter) => {
@@ -459,29 +478,35 @@ function Filters({ rows, filter, onChange }: { rows: SheetRow[]; filter: ListFil
   };
 
   return (
-    <div className="filters" id="filters" title="Right-click a filter to hide it">
+    <div className="filters" id="filters">
+      <div className="seg filter-mode" role="group" aria-label="Filter action">
+        <button type="button" aria-pressed={!excluding} onClick={() => setExcluding(false)}>Include</button>
+        <button type="button" aria-pressed={excluding} onClick={() => setExcluding(true)}>Exclude</button>
+      </div>
       <span className="flabel">Type</span>
       {kinds.map((kind) => (
         <button
           key={kind}
           className={filter.excludedKinds.includes(kind) ? 'chip excluded' : 'chip'}
-          aria-pressed={filter.kinds.includes(kind)}
-          onClick={() => onChange(toggleKind(filter, kind))}
+          aria-pressed={excluding ? filter.excludedKinds.includes(kind) : filter.kinds.includes(kind)}
+          aria-label={filter.excludedKinds.includes(kind) ? `${KIND_PLURAL[kind]}, excluded` : undefined}
+          onClick={() => onChange(excluding ? toggleExcludedKind(filter, kind) : toggleKind(filter, kind))}
           onContextMenu={(event) => hide(event, toggleExcludedKind(filter, kind))}
         >
-          {KIND_PLURAL[kind]}
+          {KIND_PLURAL[kind]}{filter.excludedKinds.includes(kind) && <span aria-hidden="true"> ×</span>}
         </button>
       ))}
       <span className="flabel">Result</span>
-      {RESULTS.map((result) => (
+      {RESULTS.filter((result) => !excluding || result.value !== 'all').map((result) => (
         <button
           key={result.value}
           className={filter.excludedResults.includes(result.value) ? 'chip excluded' : 'chip'}
-          aria-pressed={filter.result === result.value}
-          onClick={() => onChange(pickResult(filter, result.value))}
+          aria-pressed={excluding ? filter.excludedResults.includes(result.value) : filter.result === result.value}
+          aria-label={filter.excludedResults.includes(result.value) ? `${result.label}, excluded` : undefined}
+          onClick={() => onChange(excluding ? toggleExcludedResult(filter, result.value) : pickResult(filter, result.value))}
           onContextMenu={(event) => hide(event, toggleExcludedResult(filter, result.value))}
         >
-          {result.label}
+          {result.label}{filter.excludedResults.includes(result.value) && <span aria-hidden="true"> ×</span>}
         </button>
       ))}
       {isNarrowed(filter) && <button className="btn ghost" onClick={() => onChange(clearChips(filter))}>Clear filters</button>}
@@ -505,9 +530,9 @@ function Pager({ view, page, pageCount, total }: { view: SheetView; page: number
             </button>
           ))}
         </div>
-        <button className="btn sq" aria-label="Previous page" disabled={page === 0} onClick={() => view.setPage(page - 1)}>‹</button>
+        <button className="btn sq" aria-label="Previous page" title="Previous page" disabled={page === 0} onClick={() => view.setPage(page - 1)}>‹</button>
         <span className="count">Page {page + 1} of {pageCount}</span>
-        <button className="btn sq" aria-label="Next page" disabled={page >= pageCount - 1} onClick={() => view.setPage(page + 1)}>›</button>
+        <button className="btn sq" aria-label="Next page" title="Next page" disabled={page >= pageCount - 1} onClick={() => view.setPage(page + 1)}>›</button>
       </div>
     </div>
   );

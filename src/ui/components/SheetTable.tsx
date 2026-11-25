@@ -29,6 +29,7 @@ interface Props {
   allRows: SheetRow[];
   hasSales: boolean;
   expandedKey?: string;
+  detailsTrigger: RefObject<HTMLButtonElement>;
   detailsId: string;
   inlineDetails: boolean;
   onToggleDetails: (key: string) => void;
@@ -111,7 +112,7 @@ function useOutcomeEntry(table: RefObject<HTMLTableElement>, rows: SheetRow[]) {
   return { entry: current, finish: () => setIntro(undefined) };
 }
 
-export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsId, inlineDetails, onToggleDetails, detail, showMarketPrices, sort, onSort, selection, newSince, flipPricing, empty, onRowMenu, onRowDrag, onPickBuy }: Props) {
+export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigger, detailsId, inlineDetails, onToggleDetails, detail, showMarketPrices, sort, onSort, selection, newSince, flipPricing, empty, onRowMenu, onRowDrag, onPickBuy }: Props) {
   const detailed = detail === 'detailed';
   const table = useRef<HTMLTableElement>(null);
   const { entry: outcomeEntry, finish: finishOutcomeEntry } = useOutcomeEntry(table, rows);
@@ -276,14 +277,15 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsId, in
                       ))}
                     </span>
                   )}
-                  <input type="checkbox" checked={selected} onChange={() => selection.click(entry, { add: true, range: false }, visible)} aria-label={`Select ${row.item.marketHashName}`} />
+                  <input type="checkbox" checked={selected} onChange={() => selection.click(entry, { add: true, range: false }, visible)} aria-label={`Select ${row.item.marketHashName}`} title="Select row" />
                 </td>
                 <td className="n m">{formatDate(row.boughtAt) || <span title="No buy on record">—</span>}</td>
                 {hasSales && <td className="n m">{formatDate(row.soldAt) ||
                   <span title={row.status === 'open' ? 'Not sold' : 'No sale date on record'}>—</span>}</td>}
                 <td>
                   <div className="item-with-disclosure">
-                    <button className="row-disclosure" aria-label={`Details for ${row.item.marketHashName}`} aria-expanded={expanded}
+                    <button className="row-disclosure" ref={expanded ? detailsTrigger : undefined} title={expanded ? 'Close trade details' : 'Open trade details'}
+                      aria-label={`Details for ${row.item.marketHashName}`} aria-expanded={expanded}
                       aria-controls={expanded || !inlineDetails ? detailsId : undefined} onClick={() => onToggleDetails(row.key)}>
                       <span aria-hidden="true">›</span>
                     </button>
@@ -653,6 +655,6 @@ function PageCheck({ visible, selection }: { visible: Entry[]; selection: Select
     if (ref.current) ref.current.indeterminate = selectedCount > 0 && !all;
   }, [selectedCount, all]);
   return (
-    <input ref={ref} type="checkbox" checked={all} onChange={() => selection.setAll(visible, !all)} aria-label="Select every row on this page" />
+    <input ref={ref} type="checkbox" checked={all} onChange={() => selection.setAll(visible, !all)} aria-label="Select every row on this page" title="Select every row on this page" />
   );
 }
