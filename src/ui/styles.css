@@ -781,12 +781,13 @@ input {
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
-  width: 28px;
+  width: 23px;
   pointer-events: none;
   background: linear-gradient(
     to right,
-    color-mix(in srgb, var(--outcome-light) 24%, transparent),
-    transparent
+    var(--outcome-light) 0 4px,
+    color-mix(in srgb, var(--outcome-light) 18%, transparent) 4px,
+    transparent 23px
   );
 }
 
@@ -800,7 +801,7 @@ input {
 
 .outcome-ascii {
   position: absolute;
-  inset-inline-start: 1px;
+  inset-inline-start: 4px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -838,7 +839,7 @@ input {
 }
 
 @keyframes outcome-sweep {
-  0% { opacity: 0; transform: translateX(-1px); }
+  0% { opacity: 0; transform: translateX(-3px); }
   23% { opacity: 0.87; }
   52% { opacity: 0.58; }
   100% { opacity: 0; transform: translateX(3px); }
