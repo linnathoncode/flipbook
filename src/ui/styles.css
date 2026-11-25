@@ -38,7 +38,7 @@
   --press-inset: inset 1px 1px 0 light-dark(rgb(61 47 23 / 28%), rgb(0 0 0 / 58%)),
     inset -1px -1px 0 light-dark(rgb(255 255 255 / 83%), rgb(255 255 255 / 28%));
   --press-inset-cta: inset 1px 1px 0 light-dark(rgb(60 9 24 / 42%), rgb(20 1 8 / 60%)),
-    inset -1px -1px 0 light-dark(rgb(255 214 224 / 36%), rgb(255 181 202 / 33%));
+    inset -1px -1px 0 light-dark(rgb(255 214 224 / 36%), rgb(255 181 202 / 20%));
 
   color-scheme: light;
 }
@@ -55,7 +55,7 @@
     --cta: #862b3f;
     --accent: #c95b6b;
     --cta-hover: #96394d;
-    --cta-press: #a14557;
+    --cta-press: #6f2335;
     --on-accent: #f6f7f8;
     --pos: #4ade80;
     --neg: #df6b62;
@@ -75,7 +75,7 @@
   --cta: #862b3f;
   --accent: #c95b6b;
   --cta-hover: #96394d;
-  --cta-press: #a14557;
+  --cta-press: #6f2335;
   --on-accent: #f6f7f8;
   --pos: #4ade80;
   --neg: #df6b62;
@@ -634,13 +634,17 @@ input {
   font-weight: 500;
   pointer-events: none;
   color: var(--on-accent);
-  background: var(--cta);
+  background: var(--detail-fill, var(--cta));
   clip-path: inset(0 calc(50% + 1px - var(--detail-offset)) 0 var(--detail-offset) round var(--radius));
   transition: clip-path 240ms var(--control-easing), background-color 120ms var(--control-easing);
 }
 
 .row-detail-toggle:has(> button[aria-pressed='true']:hover) .row-detail-highlight {
-  background: var(--cta-hover);
+  --detail-fill: var(--cta-hover);
+}
+
+.row-detail-toggle:has(> button[aria-pressed='true']:active:not(:disabled)) .row-detail-highlight {
+  background: light-dark(var(--detail-fill, var(--cta)), var(--cta-press));
 }
 
 @media (forced-colors: active) {
