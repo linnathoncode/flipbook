@@ -20,7 +20,6 @@ import { useJournal } from './useJournal';
 import { useLastVisit } from './useLastVisit';
 import { usePreference } from './usePreference';
 import { useSelection, type Selection } from './useSelection';
-import { useSprinkles } from './useSprinkles';
 import { useTheme } from './useTheme';
 import { Toast, useToast } from './useToast';
 
@@ -29,7 +28,6 @@ const DEFAULT_SORT: Sort = { key: 'bought', descending: true };
 const FLIPS: MenuTarget = { id: null, name: 'Flips' };
 
 export function App() {
-  useSprinkles();
   const { journal, error, refresh, sync, refreshPrices, syncState, pricing } = useJournal();
   const [theme, toggleTheme] = useTheme();
   const lastVisit = useLastVisit();

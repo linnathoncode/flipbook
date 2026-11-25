@@ -323,17 +323,15 @@ function FolderTitle({ folder, rowCount, sync, onChange, onDeleted }: FolderTitl
   if (editing) {
     return (
       <form className="titlebar" onSubmit={rename}>
-        <span className="field-sprinkle">
-          <input
-            className="search title-input"
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => event.key === 'Escape' && setEditing(false)}
-            aria-label="Folder name"
-            maxLength={32}
-          />
-        </span>
+        <input
+          className="search title-input"
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => event.key === 'Escape' && setEditing(false)}
+          aria-label="Folder name"
+          maxLength={32}
+        />
         <button className="btn" type="submit">Save</button>
         <button className="btn ghost" type="button" onClick={() => setEditing(false)}>Cancel</button>
       </form>
@@ -382,14 +380,12 @@ function SheetSort({ sort, onSort, holds, hasSales }: { sort: Sort; onSort: (sor
     <div className="sheet-sort">
       <label>
         <span>Sort by</span>
-        <span className="field-sprinkle">
-          <select className="btn" value={sort.key} onChange={(event) => {
-            const option = options.find(([key]) => key === event.target.value);
-            if (option) onSort({ key: option[0], descending: option[0] !== 'name' });
-          }}>
-            {options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-        </span>
+        <select className="btn" value={sort.key} onChange={(event) => {
+          const option = options.find(([key]) => key === event.target.value);
+          if (option) onSort({ key: option[0], descending: option[0] !== 'name' });
+        }}>
+          {options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </select>
       </label>
       <button className="btn sq" aria-label={reverseLabel} title={reverseLabel} onClick={() => onSort({ ...sort, descending: !sort.descending })}>
         <span aria-hidden="true">{sort.descending ? '↓' : '↑'}</span>
@@ -405,7 +401,7 @@ function Toolbar({ view, shown, total, holds, hasSales, inspectorId, onFilters }
   const activeFilters = kinds.length + (result === 'all' ? 0 : 1) + excludedKinds.length + excludedResults.length;
   return (
     <div className="toolbar">
-      <label className="search-control field-sprinkle">
+      <label className="search-control">
         <Icon name="search" />
         <input
           type="search"

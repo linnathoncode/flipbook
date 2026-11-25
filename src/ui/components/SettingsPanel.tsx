@@ -53,9 +53,7 @@ export function SettingsPanel({ wideLayout, onWideLayoutChange, feeRate, rules, 
         )}
         <Row title="Seller fee" hint="Taken off every sale. CSFloat charges 2% today; its terms allow up to 5%.">
           <label className="fee">
-            <span className="field-sprinkle">
-              <input className="search" type="number" min={0} max={50} step={0.1} defaultValue={+(feeRate * PERCENT).toFixed(2)} onBlur={onFeeChange} aria-label="Seller fee in percent" />
-            </span>
+            <input className="search" type="number" min={0} max={50} step={0.1} defaultValue={+(feeRate * PERCENT).toFixed(2)} onBlur={onFeeChange} aria-label="Seller fee in percent" />
             <span>%</span>
           </label>
         </Row>
@@ -64,9 +62,7 @@ export function SettingsPanel({ wideLayout, onWideLayoutChange, feeRate, rules, 
           hint="Things you got outside CSFloat or before your history starts. Putting them in Other keeps them out of your flip totals."
         >
           <label className="check">
-            <span className="toggle-control">
-              <input type="checkbox" checked={orphansToOther} onChange={(event) => void setOrphansToOther(event.target.checked).then(onChange)} />
-            </span>
+            <input type="checkbox" checked={orphansToOther} onChange={(event) => void setOrphansToOther(event.target.checked).then(onChange)} />
             Put them in Other
           </label>
         </Row>

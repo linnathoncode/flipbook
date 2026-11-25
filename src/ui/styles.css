@@ -35,6 +35,10 @@
   --sheet-pager-height: calc(var(--control-height) + 17px);
   --pad-y: 8px;
   --control-easing: linear(0, 0.48 12.5%, 0.73 25%, 0.86 37.5%, 0.93 50%, 0.963 62.5%, 0.981 75%, 0.99 87.5%, 1);
+  --press-inset: inset 1px 1px 0 light-dark(rgb(61 47 23 / 28%), rgb(0 0 0 / 58%)),
+    inset -1px -1px 0 light-dark(rgb(255 255 255 / 83%), rgb(255 255 255 / 28%));
+  --press-inset-cta: inset 1px 1px 0 light-dark(rgb(60 9 24 / 42%), rgb(20 1 8 / 60%)),
+    inset -1px -1px 0 light-dark(rgb(255 214 224 / 36%), rgb(255 181 202 / 33%));
 
   color-scheme: light;
 }
@@ -234,7 +238,7 @@ input {
   --icon-cutout: var(--cta-hover);
 }
 
-.nav-item > span:not(.cnt, .sprinkles) {
+.nav-item > span:not(.cnt) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -451,18 +455,10 @@ input {
   border-radius: var(--radius);
 }
 
-.field-sprinkle,
-.toggle-control {
+.search-control {
   position: relative;
   display: inline-flex;
   max-width: 100%;
-}
-
-.nf .field-sprinkle {
-  width: 100%;
-}
-
-.search-control {
   align-items: center;
 }
 
@@ -2167,10 +2163,6 @@ a.market-link:active {
   cursor: pointer;
 }
 
-.toggle-control {
-  flex: none;
-}
-
 .check input {
   appearance: none;
   position: relative;
@@ -2373,7 +2365,8 @@ button.link,
 .menu button,
 .toast button {
   transition: background-color 120ms var(--control-easing), color 120ms var(--control-easing),
-    border-color 120ms var(--control-easing), transform 120ms var(--control-easing);
+    border-color 120ms var(--control-easing), transform 120ms var(--control-easing),
+    box-shadow 120ms var(--control-easing);
 }
 
 .signal {
@@ -2396,10 +2389,37 @@ button.link,
   17% { opacity: 1; }
 }
 
-button:is(.btn, .nav-item, .chip),
-.seg button,
-button:is(.market-price, .buy-order-check) {
+:is(.btn.pri, .btn[aria-pressed='true'], .btn[aria-expanded='true'], .chip[aria-pressed='true'],
+  .seg button[aria-pressed='true'], .nav-item[aria-current='page']) {
+  --button-press-inset: var(--press-inset-cta);
+}
+
+button:is(.btn, .chip, .nav-item, .row-disclosure, .menu button, .toast button,
+  .seg:not(.row-detail-toggle) button):active:not(:disabled) {
+  box-shadow: var(--button-press-inset, var(--press-inset));
+}
+
+:is(.row-detail-toggle > button, .sheet th button, button.link) {
   position: relative;
+}
+
+:is(.row-detail-toggle > button, .sheet th button, button.link)::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  transition: box-shadow 120ms var(--control-easing);
+}
+
+:is(.sheet th button, button.link)::after {
+  inset: -2px -4px;
+  border-radius: 5px;
+}
+
+:is(.row-detail-toggle > button, .sheet th button, button.link):active:not(:disabled)::after {
+  box-shadow: var(--button-press-inset, var(--press-inset));
 }
 
 button:is(.btn, .chip):active:not(:disabled),
@@ -2424,20 +2444,6 @@ button:is(.btn, .chip):active:not(:disabled),
     opacity: 0.55;
     transform: rotate(-16deg) scale(0.88);
   }
-}
-
-.sprinkles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  user-select: none;
-  color: var(--signal);
-  font: 500 9px/1 var(--font-num);
-}
-
-.sprinkles span {
-  position: absolute;
-  translate: -50% -50%;
 }
 
 @keyframes rise {
@@ -2535,7 +2541,6 @@ button:is(.btn, .chip):active:not(:disabled),
     opacity: 1;
   }
 
-  .sprinkles,
   .outcome-ascii {
     display: none;
   }

@@ -19,20 +19,18 @@ export function NewFolderForm({ onCreated, onCancel }: Props) {
 
   return (
     <form className="nf" onSubmit={submit}>
-      <span className="field-sprinkle">
-        <input
-          className="search"
-          autoFocus
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => event.key === 'Escape' && onCancel()}
-          onBlur={() => !name.trim() && onCancel()}
-          placeholder="Folder name, then Enter"
-          aria-label="New folder name"
-          maxLength={32}
-          autoComplete="off"
-        />
-      </span>
+      <input
+        className="search"
+        autoFocus
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => event.key === 'Escape' && onCancel()}
+        onBlur={() => !name.trim() && onCancel()}
+        placeholder="Folder name, then Enter"
+        aria-label="New folder name"
+        maxLength={32}
+        autoComplete="off"
+      />
     </form>
   );
 }
