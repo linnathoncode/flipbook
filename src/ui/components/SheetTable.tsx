@@ -653,11 +653,13 @@ function AdjustedFloatCell({ item }: { item: Item }) {
 function PageCheck({ visible, selection }: { visible: Entry[]; selection: Selection }) {
   const selectedCount = visible.filter((entry) => selection.has(entry.key)).length;
   const all = visible.length > 0 && selectedCount === visible.length;
+  const partial = selectedCount > 0 && !all;
+  const action = all ? 'Deselect every row on this page' : partial ? 'Select remaining rows on this page' : 'Select every row on this page';
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = selectedCount > 0 && !all;
-  }, [selectedCount, all]);
+  useLayoutEffect(() => {
+    if (ref.current) ref.current.indeterminate = partial;
+  }, [partial]);
   return (
-    <input ref={ref} type="checkbox" checked={all} onChange={() => selection.setAll(visible, !all)} aria-label="Select every row on this page" title="Select every row on this page" />
+    <input ref={ref} type="checkbox" checked={all} onChange={() => selection.setAll(visible, !all)} aria-label={action} title={action} />
   );
 }

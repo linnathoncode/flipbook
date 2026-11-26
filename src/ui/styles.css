@@ -1254,9 +1254,10 @@ input {
   .chk input[type='checkbox']:indeterminate::before {
     content: '';
     width: 7px;
-    height: 2px;
-    border-radius: 1px;
-    background: currentColor;
+    height: 7px;
+    background:
+      linear-gradient(currentColor 0 0) center / 100% 2px no-repeat,
+      linear-gradient(currentColor 0 0) center / 2px 100% no-repeat;
   }
 }
 
