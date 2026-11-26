@@ -621,19 +621,18 @@ const rangeText = (range: FloatRange) => `${range.min.toFixed(2)} to ${range.max
 function FloatCell({ item, detailed }: { item: Item; detailed: boolean }) {
   const value = item.floatValue;
   if (value === undefined) return null;
-  const range = floatRange(item);
-  if (!detailed || !range) {
-    return <span title={String(value)}><RollingNumber value={value} text={formatFloat(value)} zero="0.0000" /></span>;
-  }
-  const bar = { '--f': value, '--lo': range.min, '--hi': range.max } as CSSProperties;
+  const range = detailed ? floatRange(item) : undefined;
   return (
-    <span className="flt" title={String(value)}>
+    <span className={range ? 'flt' : undefined} title={String(value)}>
       <RollingNumber value={value} text={formatFloat(value, 6)} zero="0.000000" />
-      <span className="wbar" style={bar} title={`${item.wearName ?? 'Wear'}. This skin's floats run ${rangeText(range)}.`}>
-        <b className="cap l" />
-        <b className="cap r" />
-        <i />
-      </span>
+      {range && (
+        <span className="wbar" style={{ '--f': value, '--lo': range.min, '--hi': range.max } as CSSProperties}
+          title={`${item.wearName ?? 'Wear'}. This skin's floats run ${rangeText(range)}.`}>
+          <b className="cap l" />
+          <b className="cap r" />
+          <i />
+        </span>
+      )}
     </span>
   );
 }
