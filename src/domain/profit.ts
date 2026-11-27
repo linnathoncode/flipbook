@@ -53,6 +53,14 @@ export function summarizeSettled(flips: Flip[]): ProfitSummary {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Whole days between buying and selling; undefined when the sell date wasn't recorded. */
+/**
+ * A closed trade counts as a win unless it lost at least a cent. The Win filter, the Win rate KPI
+ * and analytics all use this, so they agree on sub-cent results like -$0.004.
+ */
+export function isWin(net: number): boolean {
+  return Math.round(net * 100) >= 0;
+}
+
 export function heldDays(flip: Flip): number | undefined {
   if (flip.sell.source === 'xlsx') return undefined;
   return Math.max(0, Math.round((Date.parse(flip.sell.at) - Date.parse(flip.buy.at)) / DAY_MS));

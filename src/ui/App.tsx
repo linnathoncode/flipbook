@@ -51,6 +51,10 @@ export function App() {
   const selection = useSelection();
   const { toast, show, dismiss } = useToast();
 
+  // One price request at a time: a single row, a held-items batch, or a sync (which can price) never overlap.
+  const batchPricing = pricing !== undefined || syncState.kind === 'syncing';
+  const priceBusy = pricingFlip !== undefined || batchPricing;
+
   const pageSize = PAGE_SIZES.includes(storedPageSize) ? storedPageSize : 25;
 
   // A folder deleted elsewhere (or just now) falls back to Flips.
@@ -142,9 +146,10 @@ export function App() {
     lastSyncError: journal.settings.lastSyncError,
     syncState,
     onSync: sync,
-    onRefreshPrices: refreshPrices,
+    onRefreshPrices: () => { if (!priceBusy) void refreshPrices(); },
     pricesPausedUntil: journal.settings.pricesPausedUntil,
     pricing,
+    rowPricing: pricingFlip !== undefined,
     theme,
     onToggleTheme: toggleTheme,
   };
@@ -187,7 +192,7 @@ export function App() {
   };
 
   const priceFlip = async (row: SheetRow) => {
-    if (pricingFlip) return;
+    if (priceBusy) return;
     setPricingFlip(row.key);
     try {
       await requestItemPrice(row.item);
@@ -275,7 +280,7 @@ export function App() {
             }}
             moveMenuOpen={Boolean(menu?.trigger)}
             flipPricing={current.kind === 'flips' || holds ? {
-              active: pricingFlip, requested: pricedFlips, quotes: journal.prices, onPrice: (row) => void priceFlip(row),
+              active: pricingFlip, blocked: priceBusy, requested: pricedFlips, quotes: journal.prices, onPrice: (row) => void priceFlip(row),
             } : undefined}
             onRowMenu={onRowMenu}
             onRowDrag={onRowDrag}

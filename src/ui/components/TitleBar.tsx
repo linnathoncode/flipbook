@@ -19,6 +19,8 @@ export interface SyncProps {
   pricesPausedUntil?: string;
   /** Set while held items are being priced. */
   pricing?: PricingProgress;
+  /** Set while a single row is being priced; blocks a held-items batch from starting alongside it. */
+  rowPricing: boolean;
   theme: Theme;
   onToggleTheme: () => void;
 }

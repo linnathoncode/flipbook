@@ -2,8 +2,9 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, ty
 import { deleteFolder, renameFolder } from '../../app/actions';
 import { HOLDS_ID, isDefaultFolder, OTHER_ID, type Folder } from '../../domain/folders';
 import { ITEM_KINDS, itemKind, KIND_PLURAL } from '../../domain/itemKinds';
+import { isWin } from '../../domain/profit';
 import { clearChips, EMPTY_FILTER, isNarrowed, isUnfiltered, pickResult, toggleExcludedKind, toggleExcludedResult, toggleKind, totalRows, type ListFilter, type ResultFilter, type SheetRow, type Sort } from '../../domain/listFilters';
-import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural, roundTo } from '../format';
+import { formatMoney, formatPercent, formatSignedMoney, formatTimeAgo, plural } from '../format';
 import type { Selection } from '../useSelection';
 import type { AnalyticsDrilldown } from './AnalyticsScreen';
 import { Icon } from './Icon';
@@ -294,7 +295,7 @@ function SheetKpis({ folder, rows, sync }: { folder?: Folder; rows: SheetRow[]; 
   }
 
   const { closed, net, weightedPercent } = totalRows(rows);
-  const wins = rows.filter((row) => row.net !== undefined && roundTo(row.net, 2) >= 0).length;
+  const wins = rows.filter((row) => row.net !== undefined && isWin(row.net)).length;
   return (
     <>
       <Kpi label="Net profit" value={net === undefined ? '—' : formatSignedMoney(net)} sign={net} />
@@ -336,7 +337,7 @@ function HoldValue({ open, sync }: { open: SheetRow[]; sync: SyncProps }) {
       <Kpi label="Longest held" value={open.length ? plural(open.reduce((days, row) => Math.max(days, row.held ?? 0), 0), 'day') : '\u2014'} />
       <div className="hold-pricing">
         <span className="hint" role="status">{status}</span>
-        <button className="btn" onClick={sync.onRefreshPrices} disabled={refreshing || paused || pricing !== undefined}>
+        <button className="btn" onClick={sync.onRefreshPrices} disabled={refreshing || paused || pricing !== undefined || sync.rowPricing}>
           {pricing ? 'Pricing\u2026' : refreshing ? 'Syncing\u2026' : 'Refresh prices'}
         </button>
         {pricing && (

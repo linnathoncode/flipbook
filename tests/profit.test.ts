@@ -1,7 +1,14 @@
-import { buildFlip, summarize } from '../src/domain/profit';
+import { buildFlip, isWin, summarize } from '../src/domain/profit';
 import { sticker, trade } from './builders';
 
 describe('profit', () => {
+  it('treats sub-cent results as break-even wins and a lost cent as a loss', () => {
+    expect(isWin(0)).toBe(true);
+    expect(isWin(-0.004)).toBe(true);
+    expect(isWin(-0.01)).toBe(false);
+    expect(isWin(0.004)).toBe(true);
+  });
+
   // Row 2 of the existing Flips sheet: 7.65 → 8.15 gives fee 0.163, net 0.337, 4.4%.
   const flipFromSheet = () => {
     const buy = trade('buy', sticker(), '2026-01-01', 765);

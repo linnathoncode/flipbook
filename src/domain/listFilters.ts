@@ -4,7 +4,7 @@ import { itemKind, type ItemKind } from './itemKinds';
 import type { UnmatchedEntry } from './journal';
 import type { Listing } from './listings';
 import type { PriceQuote } from './prices';
-import { centsToDollars, heldDays, type Flip } from './profit';
+import { centsToDollars, heldDays, isWin, type Flip } from './profit';
 import type { Item, MatchConfidence, Trade } from './types';
 
 /**
@@ -221,8 +221,8 @@ export function filterRows(rows: SheetRow[], filter: ListFilter): SheetRow[] {
 function matchesResult(row: SheetRow, result: ResultFilter): boolean {
   if (result === 'open') return row.status === 'open';
   if (result === 'listed') return row.listing !== undefined;
-  if (result === 'win') return row.net !== undefined && row.net >= 0;
-  if (result === 'loss') return row.net !== undefined && row.net < 0;
+  if (result === 'win') return row.net !== undefined && isWin(row.net);
+  if (result === 'loss') return row.net !== undefined && !isWin(row.net);
   return true;
 }
 

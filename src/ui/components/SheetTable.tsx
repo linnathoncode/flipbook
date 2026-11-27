@@ -18,6 +18,8 @@ export type RowDetail = 'compact' | 'detailed';
 
 export interface FlipPricing {
   active?: string;
+  /** A price request is already running (this row's, another row's, or a held-items batch), so no new one may start. */
+  blocked: boolean;
   requested: string[];
   quotes: ReadonlyMap<string, PriceQuote>;
   onPrice: (row: SheetRow) => void;
@@ -299,7 +301,7 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
                 {showMarketPrices && (
                   <>
                     <td className="n">{row.status === 'open' && <MarketPrices item={row.item} quote={row.marketQuote}
-                      onCheck={flipPricing && (() => flipPricing.onPrice(row))} busy={flipPricing?.active === row.key} disabled={flipPricing?.active !== undefined} />}</td>
+                      onCheck={flipPricing && (() => flipPricing.onPrice(row))} busy={flipPricing?.active === row.key} disabled={flipPricing?.blocked} />}</td>
                     <td className="n pl">
                       {row.quote && <Estimate quote={row.quote} signed={row.quote.net}>{formatSignedMoney(row.quote.net)}</Estimate>}
                     </td>
@@ -371,7 +373,7 @@ function MarketActions({ row, pricing }: { row: SheetRow; pricing?: FlipPricing 
         Listings <span aria-hidden="true">↗</span>
       </a>
       {pricing && (
-        <button className="link market-link market-price" disabled={pricing.active !== undefined} onClick={() => pricing.onPrice(row)} title={priceHint}
+        <button className="link market-link market-price" disabled={pricing.blocked} onClick={() => pricing.onPrice(row)} title={priceHint}
           aria-label={busy ? `Pricing ${name}` : quote ? `Refresh price for ${name}` : `Price item: ${name}`}>
           <span aria-live="polite">{busy ? 'Pricing…' : quote ? 'Refresh prices' : 'Price item'}</span>
           {busy && <span className="row-price-signal"><Signal compact /></span>}
@@ -425,7 +427,7 @@ export function TradeInspector({ row, showMarketPrices, pricing }: { row: SheetR
         <TradeDetails row={row} inspector />
         <MarketActions row={row} pricing={open && !showMarketPrices ? pricing : undefined} />
         {open && showMarketPrices && <MarketPrices item={row.item} quote={row.marketQuote}
-          onCheck={pricing && (() => pricing.onPrice(row))} busy={pricing?.active === row.key} disabled={pricing?.active !== undefined} />}
+          onCheck={pricing && (() => pricing.onPrice(row))} busy={pricing?.active === row.key} disabled={pricing?.blocked} />}
       </div>
     </HoverCardProvider>
   );

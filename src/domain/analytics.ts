@@ -1,5 +1,5 @@
 import { itemKind, type ItemKind } from './itemKinds';
-import { centsToDollars, heldDays, type Flip } from './profit';
+import { centsToDollars, heldDays, isWin, type Flip } from './profit';
 import type { Trade } from './types';
 
 export const ANALYTICS_PERIODS = ['30d', '90d', 'all'] as const;
@@ -59,7 +59,7 @@ export function analyze(flips: Flip[], openBuys: Trade[], period: AnalyticsPerio
   const held = closed.map(heldDays).filter((days): days is number => days !== undefined);
   const byNet = [...closed].sort((a, b) => b.netProfit - a.netProfit);
   const profitable = byNet.filter((flip) => Math.round(flip.netProfit * 100) > 0);
-  const flops = byNet.filter((flip) => Math.round(flip.netProfit * 100) < 0);
+  const flops = byNet.filter((flip) => !isWin(flip.netProfit));
   const gains = sumNet(profitable);
   const closedCost = closed.reduce((sum, flip) => sum + flip.buyPrice, 0);
 
