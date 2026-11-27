@@ -152,7 +152,8 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
           const selected = selection.has(row.key);
           const expanded = expandedKey === row.key;
           const outcome = tradeOutcome(row);
-          const entryAnimation = outcome ? outcomeEntry?.byKey.get(row.key) : undefined;
+          const rowEntryAnimation = outcomeEntry?.byKey.get(row.key);
+          const asciiLines = !outcomeEntry?.asciiDone ? rowEntryAnimation?.lines : undefined;
           const isNew = isAfter(row.boughtAt, newSince) || isAfter(row.soldAt, newSince);
           const clickRow = (event: MouseEvent) => {
             if (isControl(event.target)) return;
@@ -169,9 +170,9 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
                 className={`row ${row.status} ${selected ? 'sel' : ''} ${expanded ? 'expanded' : ''}`}
                 aria-selected={selected}
                 data-outcome={outcome}
-                data-outcome-entry={entryAnimation ? true : undefined}
-                style={entryAnimation ? { '--entry-delay': `${entryAnimation.delay}ms` } as CSSProperties : undefined}
-                onAnimationEnd={row.key === outcomeEntry?.last ? (event) => {
+                data-outcome-entry={asciiLines !== undefined ? true : undefined}
+                style={rowEntryAnimation ? { '--entry-delay': `${rowEntryAnimation.delay}ms` } as CSSProperties : undefined}
+                onAnimationEnd={row.key === outcomeEntry?.lastOutcome && !outcomeEntry.asciiDone ? (event) => {
                   if (event.animationName === 'outcome-light') finishOutcomeEntry();
                 } : undefined}
                 draggable
@@ -200,11 +201,11 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
                 onClick={clickRow}
               >
                 <td className="chk">
-                  {entryAnimation && (
+                  {asciiLines !== undefined && (
                     <span className="outcome-ascii" aria-hidden="true">
                       {ENTRY_MARKS.map((column) => (
                         <span key={column}>
-                          {Array.from({ length: detailed ? entryAnimation.lines : column.length }, (_, index) => (
+                          {Array.from({ length: detailed ? asciiLines : column.length }, (_, index) => (
                             <span key={index}>{column[index % column.length]}</span>
                           ))}
                         </span>
@@ -234,7 +235,11 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
                     <td className="n">{row.status === 'open' && <MarketPrices item={row.item} quote={row.marketQuote}
                       onCheck={flipPricing && (() => flipPricing.onPrice(row))} busy={flipPricing?.active === row.key} disabled={flipPricing?.blocked} />}</td>
                     <td className="n pl">
-                      {row.quote && <Estimate quote={row.quote} signed={row.quote.net}>{formatSignedMoney(row.quote.net)}</Estimate>}
+                      {row.quote && (
+                        <Estimate quote={row.quote} signed={row.quote.net}>
+                          <RollingNumber value={row.quote.net} text={formatSignedMoney(row.quote.net)} zero="+$0.00" />
+                        </Estimate>
+                      )}
                     </td>
                   </>
                 )}
@@ -260,29 +265,33 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
           );
         })}
       </tbody>
-      <tfoot>
+      <tfoot style={outcomeEntry ? { '--entry-delay': `${outcomeEntry.totalsDelay}ms` } as CSSProperties : undefined}>
         <tr>
           <td colSpan={leadingColumns}>{summaryLabel}{summaryScope && <span className="m">{summaryScope}</span>}</td>
-          <td className="n">{formatMoney(totals.buy)}</td>
+          <td className="n">{totals.buy !== undefined && <RollingNumber value={totals.buy} text={formatMoney(totals.buy)} zero="$0.00" />}</td>
           {showMarketPrices && (
             <>
-              <td className="n est">{formatMoney(totals.nowPrice)}</td>
+              <td className="n est">{totals.nowPrice !== undefined && <RollingNumber value={totals.nowPrice} text={formatMoney(totals.nowPrice)} zero="$0.00" />}</td>
               <td className={`n pl est ${signClass(totals.nowNet)}`} title={totals.nowPercent === undefined ? undefined :
                 `Estimated profit: ${formatPercent(totals.nowPercent)}`}>
-                {totals.nowNet === undefined ? '' : formatSignedMoney(totals.nowNet)}
+                {totals.nowNet !== undefined && <RollingNumber value={totals.nowNet} text={formatSignedMoney(totals.nowNet)} zero="+$0.00" />}
               </td>
             </>
           )}
           {hasSales && (
             <>
-              <td className="n">{formatMoney(totals.sell)}</td>
-              <td className="n m">{formatMoney(totals.fee)}</td>
+              <td className="n">{totals.sell !== undefined && <RollingNumber value={totals.sell} text={formatMoney(totals.sell)} zero="$0.00" />}</td>
+              <td className="n m">{totals.fee !== undefined && <RollingNumber value={totals.fee} text={formatMoney(totals.fee)} zero="$0.00" />}</td>
             </>
           )}
-          {showNet && <td className={`n pl ${signClass(totals.net)}`}>{totals.net === undefined ? '' : formatSignedMoney(totals.net)}</td>}
+          {showNet && (
+            <td className={`n pl ${signClass(totals.net)}`}>
+              {totals.net !== undefined && <RollingNumber value={totals.net} text={formatSignedMoney(totals.net)} zero="+$0.00" />}
+            </td>
+          )}
           {hasSales && (
             <td className={`n pl ${signClass(totals.weightedPercent)}`} title="Weighted profit over the cost of closed flips">
-              {totals.weightedPercent === undefined ? '' : formatPercent(totals.weightedPercent)}
+              {totals.weightedPercent !== undefined && <RollingNumber value={totals.weightedPercent} text={formatPercent(totals.weightedPercent)} zero="0.0%" />}
             </td>
           )}
         </tr>

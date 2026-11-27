@@ -9,6 +9,7 @@ import type { Selection } from '../useSelection';
 import type { AnalyticsDrilldown } from './AnalyticsScreen';
 import { Icon } from './Icon';
 import { PageTurner } from './PageTurner';
+import { RollingNumber } from './RollingNumber';
 import { SheetTable, TradeInspector, type FlipPricing, type RowDetail } from './SheetTable';
 import { Kpi } from './shared';
 import { TitleBar, type SyncProps } from './TitleBar';
@@ -277,18 +278,20 @@ function SheetKpis({ folder, rows, sync }: { folder?: Folder; rows: SheetRow[]; 
   const sum = (list: SheetRow[], pick: (row: SheetRow) => number | undefined) => list.reduce((total, row) => total + (pick(row) ?? 0), 0);
 
   if (folder?.id === OTHER_ID) {
+    const saleValue = sum(sales, (row) => row.sellPrice);
     return (
       <>
         <Kpi label="Sold" value={sales.length} />
-        <Kpi label="Sale value" value={formatMoney(sum(sales, (row) => row.sellPrice))} />
+        <Kpi label="Sale value" value={<RollingNumber value={saleValue} text={formatMoney(saleValue)} zero="$0.00" />} />
       </>
     );
   }
   if (folder?.id === HOLDS_ID) {
+    const buyCost = sum(open, (row) => row.buyPrice);
     return (
       <>
         <Kpi label="Holding" value={open.length} />
-        <Kpi label="Total buy cost" value={formatMoney(sum(open, (row) => row.buyPrice))} />
+        <Kpi label="Total buy cost" value={<RollingNumber value={buyCost} text={formatMoney(buyCost)} zero="$0.00" />} />
         <HoldValue open={open} sync={sync} />
       </>
     );
@@ -298,10 +301,10 @@ function SheetKpis({ folder, rows, sync }: { folder?: Folder; rows: SheetRow[]; 
   const wins = rows.filter((row) => row.net !== undefined && isWin(row.net)).length;
   return (
     <>
-      <Kpi label="Net profit" value={net === undefined ? '—' : formatSignedMoney(net)} sign={net} />
+      <Kpi label="Net profit" value={net === undefined ? '—' : <RollingNumber value={net} text={formatSignedMoney(net)} zero="+$0.00" />} sign={net} />
       <Kpi label="Closed" value={closed} />
       <Kpi label="Win rate" value={closed ? `${Math.round((wins / closed) * 100)}%` : '—'} />
-      <Kpi label="Weighted return" value={weightedPercent === undefined ? '—' : formatPercent(weightedPercent)} sign={weightedPercent} sub="On closed buy cost" />
+      <Kpi label="Weighted return" value={weightedPercent === undefined ? '—' : <RollingNumber value={weightedPercent} text={formatPercent(weightedPercent)} zero="0.0%" />} sign={weightedPercent} sub="On closed buy cost" />
       <Kpi label="Open" value={open.length} sub={`${formatMoney(sum(open, (row) => row.buyPrice))} in`} />
     </>
   );
@@ -330,9 +333,9 @@ function HoldValue({ open, sync }: { open: SheetRow[]; sync: SyncProps }) {
 
   return (
     <>
-      <Kpi label="Worth now" value={formatMoney(nowPrice) || '\u2014'}
+      <Kpi label="Worth now" value={nowPrice === undefined ? '\u2014' : <RollingNumber value={nowPrice} text={formatMoney(nowPrice)} zero="$0.00" />}
         sub={pricedBuy !== undefined && priced.length < open.length ? `${formatMoney(pricedBuy)} buy cost for priced items` : undefined} />
-      <Kpi label="Profit if sold" value={nowNet === undefined ? '\u2014' : formatSignedMoney(nowNet)} sign={nowNet}
+      <Kpi label="Profit if sold" value={nowNet === undefined ? '\u2014' : <RollingNumber value={nowNet} text={formatSignedMoney(nowNet)} zero="+$0.00" />} sign={nowNet}
         sub={nowNet === undefined ? undefined : 'After fees'} />
       <Kpi label="Longest held" value={open.length ? plural(open.reduce((days, row) => Math.max(days, row.held ?? 0), 0), 'day') : '\u2014'} />
       <div className="hold-pricing">

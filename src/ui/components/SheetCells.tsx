@@ -242,7 +242,7 @@ export function FloatCell({ item, detailed }: { item: Item; detailed: boolean })
   const range = detailed ? floatRange(item) : undefined;
   return (
     <span className={range ? 'flt' : undefined} title={String(value)}>
-      <RollingNumber value={value} text={formatFloat(value, 6)} zero="0.000000" />
+      <span>{formatFloat(value, 6)}</span>
       {range && (
         <span className="wbar" style={{ '--f': value, '--lo': range.min, '--hi': range.max } as CSSProperties}
           title={`${item.wearName ?? 'Wear'}. This skin's floats run ${rangeText(range)}.`}>
