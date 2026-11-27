@@ -63,7 +63,6 @@ export interface ListedFor {
   percent: number;
 }
 
-
 export function sectionRows(section: Section, feeRate: number, now: Date, market: MarketData = {}): SheetRow[] {
   return [
     ...section.openBuys.map((buy) => openRow(buy, now, feeRate, market.listed?.get(buy.id), market.prices?.get(buy.item.marketHashName))),
