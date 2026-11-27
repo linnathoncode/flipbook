@@ -32,7 +32,7 @@ interface Props extends SyncProps {
 }
 
 /** Page title on the left; sync status, Sync now and the theme switch on the right. */
-export function TitleBar({ title, children, onSync, syncState, theme, onToggleTheme, ...status }: Props) {
+export function TitleBar({ title, children, onSync, syncState, rowPricing, theme, onToggleTheme, ...status }: Props) {
   const themeLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
   return (
     <div className="titlebar">
@@ -40,7 +40,7 @@ export function TitleBar({ title, children, onSync, syncState, theme, onToggleTh
       {children}
       <div className="title-actions">
         <SyncLabel syncState={syncState} {...status} />
-        <button className="btn pri" onClick={onSync} disabled={syncState.kind === 'syncing'}>Sync now</button>
+        <button className="btn pri" onClick={onSync} disabled={syncState.kind === 'syncing' || rowPricing}>Sync now</button>
         <button className="btn sq ghost" onClick={onToggleTheme} aria-label={themeLabel} title={themeLabel}>
           <span key={theme} className="theme-glyph"><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></span>
         </button>

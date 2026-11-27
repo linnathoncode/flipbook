@@ -44,7 +44,7 @@ export function SettingsPanel({ wideLayout, onWideLayoutChange, feeRate, rules, 
           title="Sync with CSFloat"
           hint="Happens on its own whenever a CSFloat tab loads, every 30 minutes while one is open, and when you open flipbook. It reads your history through the tab you're logged in to. flipbook never sees your password or an API key."
         >
-          <button className="btn" onClick={sync.onSync} disabled={sync.syncState.kind === 'syncing'}>Sync now</button>
+          <button className="btn" onClick={sync.onSync} disabled={sync.syncState.kind === 'syncing' || sync.rowPricing}>Sync now</button>
         </Row>
         {listingsError && (
           <Row title="Listings" hint={`Your trades synced, but flipbook could not read what you have listed, so the Listed tags may be out of date. CSFloat said: ${listingsError}`}>

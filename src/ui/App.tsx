@@ -145,7 +145,8 @@ export function App() {
     lastSyncAt: journal.settings.lastSyncAt,
     lastSyncError: journal.settings.lastSyncError,
     syncState,
-    onSync: sync,
+    // A sync can price held items, so it waits for a single-row price to finish.
+    onSync: () => { if (pricingFlip === undefined) void sync(); },
     onRefreshPrices: () => { if (!priceBusy) void refreshPrices(); },
     pricesPausedUntil: journal.settings.pricesPausedUntil,
     pricing,
