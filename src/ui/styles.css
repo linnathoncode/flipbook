@@ -1721,7 +1721,8 @@ a.market-link:active {
 }
 
 .rolling-reels[data-initial] .rolling-strip {
-  animation-duration: 620ms;
+  animation-duration: 570ms;
+  animation-delay: var(--entry-delay, 0ms);
 }
 
 @keyframes digit-reel {

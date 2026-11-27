@@ -6,6 +6,7 @@ interface Reading {
 }
 
 interface Roll {
+  id: number;
   from: Reading;
   to: Reading;
   initial: boolean;
@@ -16,6 +17,7 @@ const isDigit = (character: string) => /^[0-9]$/.test(character);
 export function RollingNumber({ value, text, zero }: Reading & { zero: string }) {
   const element = useRef<HTMLSpanElement>(null);
   const previous = useRef<Reading>();
+  const nextId = useRef(0);
   const [roll, setRoll] = useState<Roll>();
 
   useLayoutEffect(() => {
@@ -38,14 +40,14 @@ export function RollingNumber({ value, text, zero }: Reading & { zero: string })
       setRoll(undefined);
       return;
     }
-    setRoll({ from, to: current, initial: !prior });
+    setRoll({ id: ++nextId.current, from, to: current, initial: !prior });
   }, [value, text, zero]);
 
   return (
     <span className="rolling-number" ref={element}>
       <span className={roll ? 'rolling-value rolling-value-covered' : 'rolling-value'}>{text}</span>
       {roll && (
-        <span className="rolling-reels" key={roll.to.text} data-initial={roll.initial || undefined}
+        <span className="rolling-reels" key={roll.id} data-initial={roll.initial || undefined}
           aria-hidden="true" onAnimationEnd={() => setRoll(undefined)}>
           {renderReels(roll)}
         </span>

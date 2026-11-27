@@ -5,11 +5,12 @@ import type { Entry, Selection } from '../useSelection';
 import { HoverCardProvider } from './HoverCard';
 import { isAfter, signClass, SortHeader } from './shared';
 
-export type RowDetail = 'compact' | 'detailed';
-
 import { Estimate, FloatCell, ItemCell, MarketPrices, NetCell, PROFIT_BAR_LIMIT, ProfitPercent, type FlipPricing } from './SheetCells';
+import { RollingNumber } from './RollingNumber';
 import { TradeDetails } from './TradeInspector';
 import { ENTRY_MARKS, tradeOutcome, useOutcomeEntry } from './useOutcomeEntry';
+
+export type RowDetail = 'compact' | 'detailed';
 
 export type { FlipPricing } from './SheetCells';
 export { TradeInspector } from './TradeInspector';
@@ -290,7 +291,6 @@ export function SheetTable({ rows, allRows, hasSales, expandedKey, detailsTrigge
     </HoverCardProvider>
   );
 }
-
 
 /** Selects or clears every row on this page. */
 function PageCheck({ visible, selection }: { visible: Entry[]; selection: Selection }) {

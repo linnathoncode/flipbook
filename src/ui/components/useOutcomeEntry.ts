@@ -1,10 +1,11 @@
-/** The one-time ASCII reveal that marks each closed trade's outcome as rows first appear. */
+/** The one-time row-by-row reveal that coordinates outcome ASCII sweeps and rolling numbers as rows first appear. */
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { SheetRow } from '../../domain/listFilters';
 import { roundTo } from '../format';
 
 export const ENTRY_STAGGER_MS = 155;
 export const ENTRY_WINDOW_MS = 950;
+export const ENTRY_DURATION_MS = 570;
 export const ENTRY_MARKS = ['*+*', '+.+', '.*.', '.+.'];
 export const ENTRY_GLYPH_HEIGHT = 8;
 
@@ -13,13 +14,17 @@ export function tradeOutcome(row: SheetRow) {
   return net > 0 ? 'gain' : net < 0 ? 'loss' : undefined;
 }
 
+interface IntroState {
+  visibleRows: { key: string; index: number }[];
+  byKey: Map<string, { delay: number; lines?: number }>;
+  lastOutcome?: string;
+  totalsDelay: number;
+  asciiDone: boolean;
+}
+
 export function useOutcomeEntry(table: RefObject<HTMLTableElement>, rows: SheetRow[]) {
   const initialRows = useRef(rows);
-  const [intro, setIntro] = useState<{
-    visibleRows: { key: string; index: number }[];
-    byKey: Map<string, { delay: number; lines: number }>;
-    last: string;
-  }>();
+  const [intro, setIntro] = useState<IntroState>();
   useLayoutEffect(() => {
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     const element = table.current;
@@ -34,23 +39,35 @@ export function useOutcomeEntry(table: RefObject<HTMLTableElement>, rows: SheetR
       const rect = element.getBoundingClientRect();
       return row && rect.top < visible && rect.bottom > top ? [{ row, index, height: rect.height }] : [];
     });
-    const entries = visibleRows.filter(({ row }) => tradeOutcome(row));
-    const last = entries.at(-1)?.row.key;
-    if (!last) return;
+    if (visibleRows.length === 0) return;
 
-    const stagger = Math.min(ENTRY_STAGGER_MS, Math.floor(ENTRY_WINDOW_MS / Math.max(1, entries.length - 1)));
+    const stagger = Math.min(ENTRY_STAGGER_MS, Math.floor(ENTRY_WINDOW_MS / Math.max(1, visibleRows.length - 1)));
+    let lastOutcome: string | undefined;
+    const byKey = new Map<string, { delay: number; lines?: number }>();
+    visibleRows.forEach(({ row, height }, index) => {
+      const hasOutcome = Boolean(tradeOutcome(row));
+      if (hasOutcome) lastOutcome = row.key;
+      byKey.set(row.key, {
+        delay: index * stagger,
+        lines: hasOutcome ? Math.max(3, Math.floor((height - 4) / ENTRY_GLYPH_HEIGHT)) : undefined,
+      });
+    });
+    const totalsDelay = visibleRows.length * stagger;
     setIntro({
       visibleRows: visibleRows.map(({ row, index }) => ({ key: row.key, index })),
-      byKey: new Map(entries.map(({ row, height }, index) => [
-        row.key,
-        { delay: index * stagger, lines: Math.max(3, Math.floor((height - 4) / ENTRY_GLYPH_HEIGHT)) },
-      ])),
-      last,
+      byKey,
+      lastOutcome,
+      totalsDelay,
+      asciiDone: !lastOutcome,
     });
 
+    const clearTimer = window.setTimeout(() => setIntro(undefined), totalsDelay + ENTRY_DURATION_MS + 100);
     const handleMotion = () => { if (motion.matches) setIntro(undefined); };
     motion.addEventListener('change', handleMotion);
-    return () => motion.removeEventListener('change', handleMotion);
+    return () => {
+      window.clearTimeout(clearTimer);
+      motion.removeEventListener('change', handleMotion);
+    };
   }, [table]);
 
   const current = intro?.visibleRows.every(({ key, index }) => rows[index]?.key === key) ? intro : undefined;
@@ -58,5 +75,8 @@ export function useOutcomeEntry(table: RefObject<HTMLTableElement>, rows: SheetR
     if (intro && !current) setIntro(undefined);
   }, [intro, current]);
 
-  return { entry: current, finish: () => setIntro(undefined) };
+  return {
+    entry: current,
+    finish: () => setIntro((state) => (state ? { ...state, asciiDone: true } : undefined)),
+  };
 }

@@ -54,8 +54,18 @@ export function MarketActions({ row, pricing }: { row: SheetRow; pricing?: FlipP
 
 export function MarketPrices({ item, quote, onCheck, busy, disabled }: { item: Item; quote?: PriceQuote; onCheck?: () => void; busy?: boolean; disabled?: boolean }) {
   const bid = quote?.instantSell?.[itemPriceKey(item)];
-  const lowest = !quote ? 'Not checked' : quote.priceCents === undefined ? 'No listings' : formatMoney(centsToDollars(quote.priceCents));
-  const instant = bid?.status !== 'matched' ? 'Unavailable' : bid.priceCents === undefined ? 'No matching orders' : formatMoney(centsToDollars(bid.priceCents));
+  const lowestDollars = quote?.priceCents === undefined ? undefined : centsToDollars(quote.priceCents);
+  const lowest = !quote
+    ? 'Not checked'
+    : lowestDollars === undefined
+      ? 'No listings'
+      : <RollingNumber value={lowestDollars} text={formatMoney(lowestDollars)} zero="$0.00" />;
+  const instantDollars = bid?.status === 'matched' && bid.priceCents !== undefined ? centsToDollars(bid.priceCents) : undefined;
+  const instant = bid?.status !== 'matched'
+    ? 'Unavailable'
+    : instantDollars === undefined
+      ? 'No matching orders'
+      : <RollingNumber value={instantDollars} text={formatMoney(instantDollars)} zero="$0.00" />;
   return (
     <span className="market-quotes">
       <span title={quote && `Lowest buy-now listing for this market name, before fees. Checked ${formatTimeAgo(quote.fetchedAt)}.`}>
@@ -78,7 +88,8 @@ export function NetCell({ row, onPickBuy }: { row: SheetRow; onPickBuy: () => vo
   if (row.status === 'open') return <span className="tag open">Open</span>;
   if (row.ambiguous) return <button className="link" onClick={onPickBuy}>Pick buy</button>;
   if (row.status === 'sale') return <span className="tag open">No buy</span>;
-  return <>{row.net === undefined ? '' : formatSignedMoney(row.net)}</>;
+  if (row.net === undefined) return null;
+  return <RollingNumber value={row.net} text={formatSignedMoney(row.net)} zero="+$0.00" />;
 }
 
 /** An open buy that's up for sale: the asking price, and what it nets if it sells there. */
@@ -87,7 +98,7 @@ export function ListedTag({ listing }: { listing: ListedFor }) {
   const hint = `${what} ${formatMoney(listing.price)} since ${formatDate(listing.listedAt)}. Nets ${formatSignedMoney(listing.net)} (${formatPercent(listing.percent)}) if it sells there.`;
   return (
     <span className="tag listed" title={hint}>
-      {listing.auction ? 'Auction' : 'Listed'} {formatMoney(listing.price)}
+      {listing.auction ? 'Auction' : 'Listed'} <RollingNumber value={listing.price} text={formatMoney(listing.price)} zero="$0.00" />
     </span>
   );
 }
@@ -197,14 +208,14 @@ export function Accessories({ item }: { item: Item }) {
   );
 }
 
-export function scrapeNote(wear?: number): string {
+function scrapeNote(wear?: number): string {
   return wear ? `${Math.round(wear * 100)}% scraped` : 'Not scraped';
 }
 
 /** "Sticker | Crown (Foil)" reads as just "Crown (Foil)" under a picture of the sticker. */
-export const withoutPrefix = (name: string) => name.replace(/^(Sticker|Patch|Charm) \| /, '');
+const withoutPrefix = (name: string) => name.replace(/^(Sticker|Patch|Charm) \| /, '');
 
-export const isText = (value: string | undefined): value is string => Boolean(value);
+const isText = (value: string | undefined): value is string => Boolean(value);
 
 /** Hides itself if Steam doesn't answer, leaving the tile's rarity color or the fallback letter. */
 export function SteamImage({ iconUrl, width, height = width, fallback }: { iconUrl?: string; width: number; height?: number; fallback?: string }) {
@@ -223,7 +234,7 @@ export function SteamImage({ iconUrl, width, height = width, fallback }: { iconU
   );
 }
 
-export const rangeText = (range: FloatRange) => `${range.min.toFixed(2)} to ${range.max.toFixed(2)}`;
+const rangeText = (range: FloatRange) => `${range.min.toFixed(2)} to ${range.max.toFixed(2)}`;
 
 export function FloatCell({ item, detailed }: { item: Item; detailed: boolean }) {
   const value = item.floatValue;
