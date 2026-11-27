@@ -1,12 +1,11 @@
 import { itemKind, type ItemKind } from './itemKinds';
-import { centsToDollars, heldDays, isWin, type Flip } from './profit';
+import { centsToDollars, DAY_MS, heldDays, isWin, type Flip } from './profit';
 import type { Trade } from './types';
 
 export const ANALYTICS_PERIODS = ['30d', '90d', 'all'] as const;
 export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number];
 
 const PERIOD_DAYS: Record<AnalyticsPeriod, number> = { '30d': 30, '90d': 90, all: Infinity };
-const DAY_MS = 24 * 60 * 60 * 1000;
 const RANKED = 5;
 const HOLD_BUCKETS = [
   { label: '0-7 days', max: 7 },

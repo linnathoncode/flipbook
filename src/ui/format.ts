@@ -1,3 +1,5 @@
+import { DAY_MS } from '../domain/profit';
+
 const MINUS = '−';
 const shortDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 const shortDateWithYear = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -6,7 +8,6 @@ const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
 
 const grouped = (dollars: number) =>
   Math.abs(dollars).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

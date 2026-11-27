@@ -101,6 +101,12 @@ export async function saveSettings(settings: Settings): Promise<void> {
   await (await db()).put('meta', settings, SETTINGS_KEY);
 }
 
+/** Read-modify-write of the stored settings: merges `change` (or what it returns) over them. */
+export async function updateSettings(change: Partial<Settings> | ((settings: Settings) => Partial<Settings>)): Promise<void> {
+  const settings = await loadSettings();
+  await saveSettings({ ...settings, ...(typeof change === 'function' ? change(settings) : change) });
+}
+
 export async function loadFolders(): Promise<Folder[]> {
   return (await db()).getAll('folders');
 }

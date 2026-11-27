@@ -50,7 +50,7 @@ export function summarizeSettled(flips: Flip[]): ProfitSummary {
   return summarize(flips.filter((flip) => flip.buy.state === 'verified' && flip.sell.state === 'verified'));
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * A closed trade counts as a win unless it lost at least a cent. The Win filter, the Win rate KPI

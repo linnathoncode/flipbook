@@ -1,8 +1,8 @@
 import type { Analytics } from '../../domain/analytics';
 import { KIND_PLURAL } from '../../domain/itemKinds';
+import { DAY_MS } from '../../domain/profit';
 import { formatMonth, formatSignedMoney, plural, roundTo } from '../format';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUS = '−';
 /** Charts may grow this far past their drawn size before the text inside starts to look oversized. */
 const CHART_STRETCH = 1.25;

@@ -1,3 +1,4 @@
+import { listInResponse } from './csfloatResponse';
 import type { Item } from './types';
 
 export interface InstantSellQuote {
@@ -16,8 +17,8 @@ export function itemPriceKey(item: Item): string {
 }
 
 export function highestBuyOrder(body: unknown): number | undefined {
-  const orders = Array.isArray(body) ? body : (body as { data?: unknown } | null)?.data;
-  if (!Array.isArray(orders)) throw new Error('Unrecognized CSFloat buy-order response.');
+  const orders = listInResponse(body);
+  if (!orders) throw new Error('Unrecognized CSFloat buy-order response.');
   const prices = orders.flatMap((order) => {
     if (!order || typeof order !== 'object') return [];
     const { price, qty } = order as { price?: unknown; qty?: unknown };
@@ -73,8 +74,7 @@ interface PricedListing {
 
 /** Reads the cheapest listing out of a `/listings` response, which is a bare array or `{ data: [...] }`. */
 export function quoteFromResponse(name: string, body: unknown, fetchedAt: string): PriceQuote {
-  const list = Array.isArray(body) ? body : (body as { data?: unknown } | null)?.data;
-  const cheapest = (Array.isArray(list) ? list[0] : undefined) as PricedListing | undefined;
+  const cheapest = listInResponse(body)?.[0] as PricedListing | undefined;
   const reference = cheapest?.reference;
   return {
     name,

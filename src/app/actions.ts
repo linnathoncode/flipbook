@@ -14,9 +14,8 @@ import {
   lockMatch,
   placeTrades,
   saveFolder,
-  saveSettings,
   unlockMatch,
-  type Settings,
+  updateSettings,
 } from '../io/journalStore';
 
 export async function loadJournal() {
@@ -89,11 +88,11 @@ export async function removeRule(kind: ItemKind): Promise<void> {
 }
 
 export async function setOrphansToOther(orphansToOther: boolean): Promise<void> {
-  await updateSettings(() => ({ orphansToOther }));
+  await updateSettings({ orphansToOther });
 }
 
 export async function updateFeeRate(feeRate: number): Promise<void> {
-  await updateSettings(() => ({ feeRate }));
+  await updateSettings({ feeRate });
 }
 
 /** Exports the Flips sheet only: folders hold what isn't part of the flip record. */
@@ -107,9 +106,4 @@ export async function exportWorkbook(): Promise<Blob> {
     defaultFeeRate: settings.feeRate,
   });
   return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-}
-
-async function updateSettings(change: (settings: Settings) => Partial<Settings>): Promise<void> {
-  const settings = await loadSettings();
-  await saveSettings({ ...settings, ...change(settings) });
 }

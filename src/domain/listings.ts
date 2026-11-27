@@ -1,3 +1,4 @@
+import { listInResponse } from './csfloatResponse';
 import { normalizeItem, type CsfloatItem } from './csfloatTrades';
 import { nameKey } from './itemNames';
 import { fingerprint } from './matcher';
@@ -22,10 +23,8 @@ export interface CsfloatListing {
   item: CsfloatItem;
 }
 
-/** CSFloat answers with either a bare array or `{ data: [...] }`, depending on the endpoint version. */
 export function listingsInResponse(body: unknown): CsfloatListing[] {
-  const list = Array.isArray(body) ? body : (body as { data?: unknown } | null)?.data;
-  return Array.isArray(list) ? list.filter(isListing) : [];
+  return (listInResponse(body) ?? []).filter(isListing);
 }
 
 function isListing(value: unknown): value is CsfloatListing {

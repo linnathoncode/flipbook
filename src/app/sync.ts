@@ -5,7 +5,8 @@ import { duePriceNames, highestBuyOrder, itemPriceKey, FORCED_MIN_AGE_MS, PRICE_
 import type { Item } from '../domain/types';
 import { loadJournal } from './actions';
 import { PRICE_REQUEST_GAP_MS, withCsfloatSession, type CsfloatSession } from '../io/csfloatSync';
-import { loadPrices, loadSettings, loadTrades, replaceListings, savePrices, saveSettings, saveTrades } from '../io/journalStore';
+import { listInResponse } from '../domain/csfloatResponse';
+import { loadPrices, loadSettings, loadTrades, replaceListings, savePrices, saveTrades, updateSettings } from '../io/journalStore';
 
 export interface ImportSummary {
   added: number;
@@ -43,10 +44,10 @@ export async function syncFromCsfloat(
       return stored;
     });
     if (!summary) return { status: 'skipped' };
-    await saveSettings({ ...(await loadSettings()), lastSyncAt: new Date().toISOString(), lastSyncError: undefined });
+    await updateSettings({ lastSyncAt: new Date().toISOString(), lastSyncError: undefined });
     return { status: 'synced', ...summary };
   } catch (cause) {
-    await saveSettings({ ...(await loadSettings()), lastSyncError: errorText(cause) });
+    await updateSettings({ lastSyncError: errorText(cause) });
     throw cause;
   }
 }
@@ -73,7 +74,7 @@ async function storeCsfloatTrades(raw: CsfloatTrade[], ownerSteamId: string): Pr
   }
   await saveTrades(trades, removedIds);
   if (!settings.ownerSteamIdVerified) {
-    await saveSettings({ ...(await loadSettings()), ownerSteamId, ownerSteamIdVerified: true });
+    await updateSettings({ ownerSteamId, ownerSteamIdVerified: true });
   }
   const existingIds = new Set(existing.map((trade) => trade.id));
   return { added: trades.filter((trade) => !existingIds.has(trade.id)).length, total: trades.length };
@@ -90,7 +91,7 @@ async function syncListings(session: CsfloatSession, ownerSteamId: string): Prom
   } catch (cause) {
     listingsError = errorText(cause);
   }
-  await saveSettings({ ...(await loadSettings()), listingsError });
+  await updateSettings({ listingsError });
 }
 
 export async function priceItemFromCsfloat(item: Item | string): Promise<PriceQuote> {
@@ -99,8 +100,7 @@ export async function priceItemFromCsfloat(item: Item | string): Promise<PriceQu
   const quotes = await loadPrices();
   const bid = typeof item === 'string' ? undefined : quotes.get(name)?.instantSell?.[itemPriceKey(item)];
   if (duePriceNames([name], quotes, now, true).length === 0 && (typeof item === 'string' || bid?.status === 'matched' && now.getTime() - Date.parse(bid.fetchedAt) < FORCED_MIN_AGE_MS)) return quotes.get(name)!;
-  const { pricesPausedUntil } = await loadSettings();
-  if (pricesPausedUntil && Date.parse(pricesPausedUntil) > now.getTime()) {
+  if (pricesPaused(await loadSettings(), now)) {
     throw new Error('CSFloat paused price lookups. Try again in a little while.');
   }
 
@@ -114,11 +114,20 @@ export async function priceItemFromCsfloat(item: Item | string): Promise<PriceQu
   return result;
 }
 
+/** CSFloat said slow down: no price requests until RATE_LIMIT_PAUSE_MS from now. */
+async function pausePrices(): Promise<'rateLimited'> {
+  await updateSettings({ pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
+  return 'rateLimited';
+}
+
+function pricesPaused({ pricesPausedUntil }: { pricesPausedUntil?: string }, now: Date): boolean {
+  return pricesPausedUntil !== undefined && Date.parse(pricesPausedUntil) > now.getTime();
+}
+
 async function lookupPrice(session: CsfloatSession, name: string, keepAfter: string, items: { item: Item; listingId?: string }[] = []): Promise<PriceQuote | 'rateLimited' | 'failed'> {
   const answer = await session.cheapestListing(name);
   if ('rateLimited' in answer) {
-    await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
-    return 'rateLimited';
+    return pausePrices();
   }
   if ('failed' in answer) return 'failed';
   const quote = quoteFromResponse(name, answer.body, new Date().toISOString());
@@ -126,12 +135,11 @@ async function lookupPrice(session: CsfloatSession, name: string, keepAfter: str
   await savePrices([quote], keepAfter);
   for (const { item, listingId } of items) {
     await new Promise((resolve) => setTimeout(resolve, PRICE_REQUEST_GAP_MS));
-    const listings = Array.isArray(answer.body) ? answer.body : (answer.body as { data?: unknown } | null)?.data;
-    const commodityListing = ['sticker', 'patch', 'container'].includes(item.type) && !item.stickers?.length && !item.charms?.length && Array.isArray(listings) ? listings[0]?.id : undefined;
+    const listings = listInResponse(answer.body) as { id?: string }[] | undefined;
+    const commodityListing = ['sticker', 'patch', 'container'].includes(item.type) && !item.stickers?.length && !item.charms?.length ? listings?.[0]?.id : undefined;
     const orders = await session.matchingBuyOrders(item, listingId ?? commodityListing);
     if ('rateLimited' in orders) {
-      await saveSettings({ ...(await loadSettings()), pricesPausedUntil: new Date(Date.now() + RATE_LIMIT_PAUSE_MS).toISOString() });
-      return 'rateLimited';
+      return pausePrices();
     }
     let priceCents: number | undefined;
     let status: 'matched' | 'unavailable' = 'unavailable';
@@ -153,8 +161,7 @@ async function lookupPrice(session: CsfloatSession, name: string, keepAfter: str
  */
 async function refreshHeldPrices(session: CsfloatSession, force: boolean, onPricing: (progress: PricingProgress) => void): Promise<void> {
   const now = new Date();
-  const { pricesPausedUntil } = await loadSettings();
-  if (pricesPausedUntil && Date.parse(pricesPausedUntil) > now.getTime()) return;
+  if (pricesPaused(await loadSettings(), now)) return;
 
   const journal = await loadJournal();
   const held = journal.shelved.folders.get(HOLDS_ID)?.openBuys ?? [];

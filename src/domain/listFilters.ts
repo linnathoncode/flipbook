@@ -4,7 +4,7 @@ import { itemKind, type ItemKind } from './itemKinds';
 import type { UnmatchedEntry } from './journal';
 import type { Listing } from './listings';
 import type { PriceQuote } from './prices';
-import { centsToDollars, heldDays, isWin, type Flip } from './profit';
+import { centsToDollars, DAY_MS, heldDays, isWin, type Flip } from './profit';
 import type { Item, MatchConfidence, Trade } from './types';
 
 /**
@@ -63,7 +63,6 @@ export interface ListedFor {
   percent: number;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function sectionRows(section: Section, feeRate: number, now: Date, market: MarketData = {}): SheetRow[] {
   return [
